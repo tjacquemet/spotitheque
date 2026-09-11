@@ -13,8 +13,7 @@
     {
       "binding": "DB",
       "database_name": "spotitheque",
-      // Remplacé par l'identifiant réel après `wrangler d1 create spotitheque`.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "c9e2b347-08d9-40ca-937e-8d23e3308801",
       "migrations_dir": "migrations"
     }
   ],
