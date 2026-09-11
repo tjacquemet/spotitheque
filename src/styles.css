@@ -678,12 +678,14 @@ a {
 .sheet {
   width: 100%;
   max-width: 560px;
-  max-height: calc(100dvh - env(safe-area-inset-top) - 16px);
+  /* On laisse toujours une bande de fond touchable au-dessus du panneau. */
+  max-height: calc(100dvh - env(safe-area-inset-top) - 56px);
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 6px 18px calc(env(safe-area-inset-bottom) + 22px);
+  padding: 0 18px calc(env(safe-area-inset-bottom) + 22px);
   border-radius: 22px 22px 0 0;
   background: var(--surface);
+  transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
   animation: slide-up 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
@@ -699,12 +701,40 @@ a {
   }
 }
 
+/* Barre de fermeture, toujours visible même quand le contenu défile. */
+.sheet-top {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 48px;
+  margin: 0 -18px 4px;
+  background: var(--surface);
+  border-radius: 22px 22px 0 0;
+  touch-action: none;
+}
+
 .sheet-handle {
-  width: 38px;
+  display: grid;
+  width: 72px;
+  height: 44px;
+  place-items: center;
+}
+
+.sheet-handle span {
+  display: block;
+  width: 44px;
   height: 5px;
-  margin: 4px auto 14px;
   border-radius: 3px;
   background: var(--surface-3);
+}
+
+.sheet-close {
+  position: absolute;
+  top: 4px;
+  right: 10px;
 }
 
 .sheet-title {
