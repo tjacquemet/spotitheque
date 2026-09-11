@@ -1,0 +1,5 @@
+# Copier ce fichier en .dev.vars (ignoré par Git) pour le développement local.
+SPOTIFY_CLIENT_ID=
+SPOTIFY_CLIENT_SECRET=
+# Active /api/auth/dev-login (connexion sans Spotify), uniquement sur 127.0.0.1.
+DEV_LOGIN=1

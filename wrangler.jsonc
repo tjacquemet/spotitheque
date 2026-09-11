@@ -1,0 +1,28 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "spotitheque",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    // L'interface React est une SPA : toute navigation inconnue renvoie index.html.
+    "not_found_handling": "single-page-application",
+    // Les routes /api/* (dont la redirection OAuth) passent toujours par le Worker.
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "spotitheque",
+      // Remplacé par l'identifiant réel après `wrangler d1 create spotitheque`.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    // Client ID de l'app Spotify (non secret). Le Client Secret est un secret Wrangler.
+    "SPOTIFY_CLIENT_ID": ""
+  },
+  "observability": {
+    "enabled": true
+  }
+}
