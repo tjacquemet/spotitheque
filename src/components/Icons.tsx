@@ -116,6 +116,19 @@ export const ChevronIcon = (p: IconProps) => (
   </Icon>
 )
 
+export const TrashIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M4 6.5h16M9.5 6.5V4.8a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1.7M6.5 6.5l.8 12a1.5 1.5 0 0 0 1.5 1.4h6.4a1.5 1.5 0 0 0 1.5-1.4l.8-12" />
+  </Icon>
+)
+
+export const BanIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="m6.5 17.5 11-11" />
+  </Icon>
+)
+
 export const DiscIcon = (p: IconProps) => (
   <Icon {...p}>
     <circle cx="12" cy="12" r="9" />

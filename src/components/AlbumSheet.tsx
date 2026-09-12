@@ -5,10 +5,10 @@ import { api } from '../api'
 import { clientKind, isPhone, spotifyAlbumUrl } from '../lib/device'
 import { formatDate, plural } from '../lib/text'
 import type { Album, Tag } from '../lib/types'
-import { applyTags, useLibrary } from '../store'
+import { applyTags, deleteAlbums, useLibrary } from '../store'
 import { toast, toastError } from '../toast'
 import { AlbumCover } from './AlbumCover'
-import { DiceIcon, ExternalIcon, PlayIcon, SpeakerIcon } from './Icons'
+import { DiceIcon, ExternalIcon, PlayIcon, SpeakerIcon, TrashIcon } from './Icons'
 import { Sheet } from './Sheet'
 import { TagPicker } from './TagPicker'
 
@@ -138,6 +138,16 @@ export function AlbumSheet({ album, spotify, onClose, onAnother }: AlbumSheetPro
     applyTags([album.id], has ? [] : [tag.id], has ? [tag.id] : []).catch(toastError)
   }
 
+  const remove = () => {
+    const ok = window.confirm(
+      `Supprimer « ${album.name} » de Spotithèque ? Ses tags seront perdus. L'album n'est plus dans ta bibliothèque Spotify, rien n'y sera modifié.`,
+    )
+    if (!ok) return
+    deleteAlbums([album.id]).catch(toastError)
+    toast(`« ${album.name} » supprimé de Spotithèque`)
+    onClose()
+  }
+
   return (
     <Sheet onClose={onClose} label={album.name}>
       <div className="album-head">
@@ -169,6 +179,12 @@ export function AlbumSheet({ album, spotify, onClose, onAnother }: AlbumSheetPro
           onToggle={toggle}
           onCreated={(tag) => applyTags([album.id], [tag.id], []).catch(toastError)}
         />
+      )}
+
+      {!album.inLibrary && (
+        <button type="button" className="btn btn-danger btn-block danger-zone" onClick={remove}>
+          <TrashIcon size={18} /> Supprimer de Spotithèque
+        </button>
       )}
     </Sheet>
   )

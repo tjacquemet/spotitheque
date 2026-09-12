@@ -3,13 +3,15 @@ import type { SpotifyStatus } from '../../shared/api'
 import { countTags, filterAlbums, hasActiveFilters, sortAlbums } from '../lib/filter'
 import { plural } from '../lib/text'
 import { EMPTY_FILTERS, type Filters, type SortKey, type Tag } from '../lib/types'
-import { refreshLibrary, runSync, useLibrary } from '../store'
+import { deleteAlbums, refreshLibrary, runSync, useLibrary } from '../store'
 import { toast, toastError } from '../toast'
 import { AlbumGrid } from './AlbumGrid'
 import { AlbumSheet } from './AlbumSheet'
 import { BulkTagSheet } from './BulkTagSheet'
-import { CloseIcon, DiceIcon, DiscIcon, SearchIcon, SelectIcon, SettingsIcon, SyncIcon, TagIcon } from './Icons'
+import { CloseIcon, DiceIcon, DiscIcon, SearchIcon, SelectIcon, SettingsIcon, SyncIcon, TagIcon, TrashIcon } from './Icons'
+import { Sheet } from './Sheet'
 import { TagChip, type ChipState } from './TagChip'
+import { TagFilterPanel } from './TagFilterPanel'
 
 const SORT_STORAGE = 'spotitheque.sort'
 const HINT_STORAGE = 'spotitheque.hint-exclude'
@@ -53,6 +55,7 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
   const [selection, setSelection] = useState<Set<string> | null>(null)
   const [open, setOpen] = useState<{ id: string; random: boolean } | null>(null)
   const [bulkOpen, setBulkOpen] = useState(false)
+  const [tagPanelOpen, setTagPanelOpen] = useState(false)
   const [hintSeen, setHintSeen] = useState(() => readStorage(HINT_STORAGE) === '1')
   const query = useDeferredValue(filters.query)
 
@@ -67,7 +70,23 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
   )
   const counts = useMemo(() => (data ? countTags(results, data.links) : new Map<number, number>()), [data, results])
   const removedCount = useMemo(() => data?.albums.filter((a) => !a.inLibrary).length ?? 0, [data])
+  const untaggedCount = useMemo(
+    () => data?.albums.filter((a) => a.inLibrary && !data.links.has(a.id)).length ?? 0,
+    [data],
+  )
   const active = hasActiveFilters(effective)
+
+  // Hauteur réelle de l'en-tête : la colonne de tags se colle juste en dessous.
+  const topbar = useRef<HTMLElement>(null)
+  useEffect(() => {
+    const el = topbar.current
+    if (!el) return
+    const observer = new ResizeObserver(() => {
+      document.documentElement.style.setProperty('--topbar-h', `${el.offsetHeight}px`)
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
 
   // Les tags actifs passent en tête de la barre, qui revient au début : ils restent visibles.
   const { activeTags, otherTags } = useMemo(() => {
@@ -160,6 +179,23 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
   const openAlbum = open ? data?.albumsById.get(open.id) : undefined
   const selecting = selection !== null
 
+  // Seuls les albums retirés de Spotify peuvent être supprimés de Spotithèque.
+  const removedSelected = useMemo(
+    () => (selection && data ? [...selection].filter((id) => data.albumsById.get(id)?.inLibrary === false) : []),
+    [selection, data],
+  )
+
+  const deleteSelected = () => {
+    const count = removedSelected.length
+    const ok = window.confirm(
+      `Supprimer définitivement ${plural(count, 'album retiré de Spotify', 'albums retirés de Spotify')} de Spotithèque, avec leurs tags ?`,
+    )
+    if (!ok) return
+    deleteAlbums(removedSelected).catch(toastError)
+    toast(plural(count, 'album supprimé', 'albums supprimés'))
+    setSelection(new Set())
+  }
+
   let body
   if (!data) {
     body = loadError ? (
@@ -223,7 +259,7 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
 
   return (
     <>
-      <header className="topbar">
+      <header className="topbar" ref={topbar}>
         <div className="topbar-row">
           {selecting ? (
             <>
@@ -279,29 +315,58 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
           )}
         </div>
 
-        {data && (data.tags.length > 0 || removedCount > 0 || data.albums.length > 0) && (
-          <div className="tagbar" role="toolbar" aria-label="Filtrer par tags" ref={tagbar}>
-            {activeTags.map(renderTag)}
-            {activeTags.length > 0 && <span className="tagbar-sep" />}
-            <TagChip
-              label="Sans tag"
-              state={filters.untagged ? 'on' : 'off'}
-              onClick={() => setFilters((f) => ({ ...f, untagged: !f.untagged }))}
-            />
-            {removedCount > 0 && (
+        {/* Sur téléphone : bouton vers la liste complète, puis les tags actifs et les autres. */}
+        {data && data.albums.length > 0 && (
+          <div className="tagbar-row">
+            <button type="button" className="chip tagbar-open" onClick={() => setTagPanelOpen(true)}>
+              <TagIcon size={15} /> Tags
+              {effective.include.length + effective.exclude.length > 0 && (
+                <span className="chip-badge">{effective.include.length + effective.exclude.length}</span>
+              )}
+            </button>
+            <div className="tagbar" role="toolbar" aria-label="Filtrer par tags" ref={tagbar}>
+              {activeTags.map(renderTag)}
+              {activeTags.length > 0 && <span className="tagbar-sep" />}
               <TagChip
-                label="Retirés de Spotify"
-                count={removedCount}
-                state={filters.removed ? 'on' : 'off'}
-                onClick={() => setFilters((f) => ({ ...f, removed: !f.removed }))}
+                label="Sans tag"
+                count={untaggedCount}
+                state={filters.untagged ? 'on' : 'off'}
+                onClick={() => setFilters((f) => ({ ...f, untagged: !f.untagged }))}
               />
-            )}
-            {otherTags.length > 0 && <span className="tagbar-sep" />}
-            {otherTags.map(renderTag)}
+              {removedCount > 0 && (
+                <TagChip
+                  label="Retirés de Spotify"
+                  count={removedCount}
+                  state={filters.removed ? 'on' : 'off'}
+                  onClick={() => setFilters((f) => ({ ...f, removed: !f.removed }))}
+                />
+              )}
+              {otherTags.length > 0 && <span className="tagbar-sep" />}
+              {otherTags.map(renderTag)}
+            </div>
           </div>
         )}
       </header>
 
+      <div className="library-body">
+        {data && data.albums.length > 0 && (
+          <aside className="sidebar" aria-label="Filtrer par tags">
+            <TagFilterPanel
+              tags={data.tags}
+              counts={counts}
+              filters={effective}
+              untaggedCount={untaggedCount}
+              removedCount={removedCount}
+              active={active}
+              onToggle={tapTag}
+              onToggleExclude={longPressTag}
+              setFilters={setFilters}
+              onClear={() => setFilters(EMPTY_FILTERS)}
+            />
+          </aside>
+        )}
+
+        <div className="library-main">
       {data && data.albums.length > 0 && (
         <div className="toolbar">
           <span className="result-count">{plural(results.length, 'album', 'albums')}</span>
@@ -338,11 +403,18 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
         <p className="hint hint-bar">Astuce : un appui long sur un tag exclut les albums qui l'ont.</p>
       )}
 
-      <main>{body}</main>
+          <main>{body}</main>
+        </div>
+      </div>
 
       {selecting && (
         <div className="selection-bar">
           <span>{plural(selection.size, 'album', 'albums')}</span>
+          {removedSelected.length > 0 && (
+            <button type="button" className="btn btn-danger btn-sm" onClick={deleteSelected}>
+              <TrashIcon size={16} /> Supprimer {removedSelected.length}
+            </button>
+          )}
           <button type="button" className="btn btn-primary btn-sm" disabled={selection.size === 0} onClick={() => setBulkOpen(true)}>
             <TagIcon size={16} /> Taguer
           </button>
@@ -356,6 +428,26 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
           onClose={() => setOpen(null)}
           onAnother={open?.random ? surprise : undefined}
         />
+      )}
+      {tagPanelOpen && data && (
+        <Sheet onClose={() => setTagPanelOpen(false)} label="Filtrer par tags">
+          <h2 className="sheet-title">Filtrer par tags</h2>
+          <TagFilterPanel
+            tags={data.tags}
+            counts={counts}
+            filters={effective}
+            untaggedCount={untaggedCount}
+            removedCount={removedCount}
+            active={active}
+            onToggle={tapTag}
+            onToggleExclude={longPressTag}
+            setFilters={setFilters}
+            onClear={() => setFilters(EMPTY_FILTERS)}
+          />
+          <button type="button" className="btn btn-block" onClick={() => setTagPanelOpen(false)}>
+            Voir les {plural(results.length, 'album', 'albums')}
+          </button>
+        </Sheet>
       )}
       {bulkOpen && selection && (
         <BulkTagSheet

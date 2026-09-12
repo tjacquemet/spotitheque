@@ -104,6 +104,27 @@ libraryRoutes.post('/sync/finish', async (c) => {
   return c.json({ removed, version: removed > 0 ? versionFrom(results) : null })
 })
 
+/**
+ * Supprime définitivement des albums et leurs tags. Par sécurité, seuls les albums retirés de Spotify
+ * peuvent l'être : un album encore dans la bibliothèque reviendrait à la synchro suivante.
+ */
+libraryRoutes.post('/albums/delete', async (c) => {
+  const albumIds = parseList(asObject(await c.req.json()).albumIds, 5000, parseSpotifyId)
+  if (albumIds.length === 0) throw badRequest('Aucun album à supprimer.')
+  const db = c.env.DB
+  const ids = JSON.stringify(albumIds)
+  const results = await db.batch([
+    db.prepare(
+      `DELETE FROM album_tags WHERE album_id IN (
+         SELECT id FROM albums WHERE in_library = 0 AND id IN (SELECT value FROM json_each(?))
+       )`,
+    ).bind(ids),
+    db.prepare('DELETE FROM albums WHERE in_library = 0 AND id IN (SELECT value FROM json_each(?))').bind(ids),
+    bumpVersionStmt(db),
+  ])
+  return c.json({ deleted: results[1].meta.changes ?? 0, version: versionFrom(results) })
+})
+
 /** Couleur la moins utilisée de la palette, pour varier les nouveaux tags. */
 async function nextColor(db: D1Database): Promise<string> {
   const { results } = await db.prepare('SELECT color, count(*) AS n FROM tags GROUP BY color').all<{ color: string; n: number }>()

@@ -86,6 +86,8 @@ export const api = {
   mergeTag: (id: number, into: number) => request<MutationResult>('POST', `/tags/${id}/merge`, { into }),
   setAlbumTags: (albumIds: string[], add: number[], remove: number[]) =>
     request<MutationResult>('POST', '/album-tags', { albumIds, add, remove }),
+  deleteAlbums: (albumIds: string[]) =>
+    request<{ deleted: number; version: number }>('POST', '/albums/delete', { albumIds }),
 
   devices: () => request<{ devices: Device[] }>('GET', '/devices'),
   play: (albumId: string, deviceId: string | null, clientKind: ClientKind) =>

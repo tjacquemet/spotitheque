@@ -189,6 +189,22 @@ export function applyTags(albumIds: string[], add: number[], remove: number[]): 
   )
 }
 
+/** Supprime définitivement des albums retirés de Spotify (les albums encore présents sont ignorés). */
+export function deleteAlbums(albumIds: string[]): Promise<void> {
+  const ids = albumIds.filter((id) => state.data?.albumsById.get(id)?.inLibrary === false)
+  if (ids.length === 0) return Promise.resolve()
+  const removed = new Set(ids)
+  return optimistic(
+    (d) => {
+      const albums = d.albums.filter((a) => !removed.has(a.id))
+      const links = new Map(d.links)
+      for (const id of removed) links.delete(id)
+      return { ...d, albums, albumsById: new Map(albums.map((a) => [a.id, a])), links }
+    },
+    () => api.deleteAlbums(ids),
+  )
+}
+
 export function createTag(name: string): Promise<Tag> {
   return enqueue(async () => {
     const { tag, version } = await api.createTag(name)
