@@ -266,24 +266,15 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
               <button type="button" className="icon-btn" onClick={() => setSelection(null)} aria-label="Annuler la sélection">
                 <CloseIcon />
               </button>
-              <strong className="topbar-title">{plural(selection.size, 'sélectionné', 'sélectionnés')}</strong>
-              <span className="spacer" />
               <button type="button" className="btn btn-sm" onClick={() => setSelection(new Set(results.map((a) => a.id)))}>
                 Tout sélectionner
               </button>
+              <span className="spacer" />
+              <strong className="topbar-title">{plural(selection.size, 'sélectionné', 'sélectionnés')}</strong>
             </>
           ) : (
+            /* Actions à gauche, à portée du pouce ; le titre passe à droite. */
             <>
-              <div className="brand">
-                <DiscIcon size={22} className={sync ? 'spin' : undefined} />
-                Spotithèque
-              </div>
-              {sync && sync.total > 0 && data && data.albums.length > 0 && (
-                <span className="sync-note">
-                  {sync.full ? `Synchro ${sync.done}/${sync.total}` : 'Synchro…'}
-                </span>
-              )}
-              <span className="spacer" />
               <button type="button" className="icon-btn" onClick={() => setSelection(new Set())} aria-label="Sélectionner des albums">
                 <SelectIcon />
               </button>
@@ -293,6 +284,16 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
               <button type="button" className="icon-btn" onClick={() => onNavigate('settings')} aria-label="Réglages">
                 <SettingsIcon />
               </button>
+              <span className="spacer" />
+              {sync && sync.total > 0 && data && data.albums.length > 0 && (
+                <span className="sync-note">
+                  {sync.full ? `Synchro ${sync.done}/${sync.total}` : 'Synchro…'}
+                </span>
+              )}
+              <div className="brand">
+                <DiscIcon size={22} className={sync ? 'spin' : undefined} />
+                Spotithèque
+              </div>
             </>
           )}
         </div>
