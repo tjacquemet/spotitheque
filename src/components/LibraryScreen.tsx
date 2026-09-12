@@ -198,6 +198,15 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
     runSuggestions(ids)
       .then((result) => {
         if (!result) return
+        if (result.unavailable) {
+          toast(
+            result.suggested > 0
+              ? `${plural(result.suggested, 'proposition', 'propositions')} — MusicBrainz sature, relance plus tard pour le reste.`
+              : 'MusicBrainz est saturé pour le moment : relance l’analyse dans quelques minutes.',
+            { tone: 'error', duration: 8000 },
+          )
+          return
+        }
         if (result.suggested === 0) {
           toast('Aucune nouvelle proposition.')
           return

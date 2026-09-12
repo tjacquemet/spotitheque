@@ -1,27 +1,18 @@
 import { Hono } from 'hono'
-import type { SuggestionRow } from '../shared/api'
+import type { MusicBrainzRecord, SuggestionRow } from '../shared/api'
 import { TAG_COLORS, normalizeTagName } from '../shared/tags'
-import { bumpVersionStmt, versionFrom } from './db'
+import { bumpVersionStmt, nowIso, versionFrom } from './db'
 import { ApiError, badRequest } from './errors'
-import { MusicBrainzUnavailable, lookupAlbum, musicBrainzThrottle, saveRecordStmt } from './musicbrainz'
 import type { AppEnv } from './types'
 import { asObject, parseList, parseSpotifyId } from './validate'
 
 export const suggestRoutes = new Hono<AppEnv>()
 
-/** Albums enrichis par appel : MusicBrainz impose une requête par seconde. */
-const ENRICH_PER_RUN = 5
+/** Albums dont la fiche MusicBrainz est demandée au navigateur à chaque passe. */
+const ENRICH_PER_RUN = 24
 /** Albums analysés par appel d'IA. */
 const ANALYZE_PER_RUN = 12
 const MODEL = '@cf/openai/gpt-oss-120b'
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
-
-interface AlbumToProcess {
-  id: string
-  name: string
-  artists: string
-}
 
 interface EnrichedAlbum {
   id: string
@@ -43,29 +34,7 @@ async function tagVocabulary(db: D1Database) {
   return results
 }
 
-/**
- * Associations observées entre genres MusicBrainz et tags déjà posés : le modèle apprend
- * ainsi les habitudes de classement sans jamais recevoir de données Spotify.
- */
-async function genreHabits(db: D1Database) {
-  const { results } = await db
-    .prepare(
-      `SELECT genre.value AS genre, t.name AS tag, count(*) AS n
-       FROM album_musicbrainz mb
-       JOIN json_each(mb.genres) genre
-       JOIN album_tags x ON x.album_id = mb.album_id
-       JOIN tags t ON t.id = x.tag_id
-       GROUP BY genre.value, t.name HAVING n >= 2 ORDER BY n DESC LIMIT 60`,
-    )
-    .all<{ genre: string; tag: string; n: number }>()
-  return results
-}
-
-function buildPrompt(
-  albums: EnrichedAlbum[],
-  vocabulary: { name: string; isGenre: number; albums: number }[],
-  habits: { genre: string; tag: string; n: number }[],
-) {
+function buildPrompt(albums: EnrichedAlbum[], vocabulary: { name: string; isGenre: number; albums: number }[]) {
   // Deux listes séparées : le modèle doit recopier les noms exactement, sans y ajouter de mention.
   const format = (list: typeof vocabulary) => list.map((t) => `- ${t.name} (${t.albums} albums)`).join('\n')
   const genres = vocabulary.filter((t) => t.isGenre)
@@ -76,11 +45,11 @@ function buildPrompt(
   ]
     .filter(Boolean)
     .join('\n\n')
-  const habitList = habits.map((h) => `- ${h.genre} → ${h.tag} (${h.n}×)`).join('\n')
+
   const albumList = albums
     .map((a, i) => {
-      const genres = (JSON.parse(a.genres) as string[]).join(', ') || 'genres inconnus'
-      return `${i + 1}. « ${a.title} » par ${a.artist}${a.year ? ` (${a.year})` : ''} — ${genres}`
+      const genres = (JSON.parse(a.genres || '[]') as string[]).join(', ')
+      return `${i + 1}. « ${a.title} » par ${a.artist}${a.year ? ` (${a.year})` : ''}${genres ? ` — ${genres}` : ''}`
     })
     .join('\n')
 
@@ -92,12 +61,7 @@ function buildPrompt(
     '[{"n":1,"tags":["Techno"],"nouveaux":[]},{"n":2,"tags":[],"nouveaux":["Bossa nova"]}]',
   ].join('\n')
 
-  const user = [
-    `Étiquettes existantes :\n${tagList || '(aucune)'}`,
-    habitList ? `\nAssociations déjà observées entre genres et étiquettes :\n${habitList}` : '',
-    `\nAlbums à étiqueter :\n${albumList}`,
-  ].join('\n')
-
+  const user = `Étiquettes existantes :\n${tagList || '(aucune)'}\n\nAlbums à étiqueter :\n${albumList}`
   return { system, user }
 }
 
@@ -116,12 +80,33 @@ function extractText(answer: unknown): string {
   return typeof content === 'string' ? content : ''
 }
 
-function parseModelAnswer(text: string): ModelSuggestion[] {
+/** Isole le premier tableau JSON complet : le modèle ajoute parfois des crochets ou du texte en trop. */
+function extractJsonArray(text: string): string | null {
   const start = text.indexOf('[')
-  const end = text.lastIndexOf(']')
-  if (start === -1 || end <= start) return []
+  if (start === -1) return null
+  let depth = 0
+  let inString = false
+  let escaped = false
+  for (let i = start; i < text.length; i++) {
+    const char = text[i]
+    if (inString) {
+      if (escaped) escaped = false
+      else if (char === '\\') escaped = true
+      else if (char === '"') inString = false
+      continue
+    }
+    if (char === '"') inString = true
+    else if (char === '[') depth++
+    else if (char === ']' && --depth === 0) return text.slice(start, i + 1)
+  }
+  return null
+}
+
+function parseModelAnswer(text: string): ModelSuggestion[] {
+  const json = extractJsonArray(text)
+  if (!json) return []
   try {
-    const parsed = JSON.parse(text.slice(start, end + 1))
+    const parsed = JSON.parse(json)
     return Array.isArray(parsed) ? (parsed as ModelSuggestion[]) : []
   } catch {
     return []
@@ -132,11 +117,7 @@ const asNames = (value: unknown): string[] =>
   Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string' && v.trim().length > 0).slice(0, 3) : []
 
 /** Enregistre les propositions du modèle, en les rattachant aux tags existants quand le nom correspond. */
-async function saveSuggestions(
-  db: D1Database,
-  albums: EnrichedAlbum[],
-  answers: ModelSuggestion[],
-): Promise<number> {
+async function saveSuggestions(db: D1Database, albums: EnrichedAlbum[], answers: ModelSuggestion[]): Promise<number> {
   const { results: tags } = await db.prepare('SELECT id, name_key FROM tags').all<{ id: number; name_key: string }>()
   const byKey = new Map(tags.map((t) => [t.name_key, t.id]))
   const rows: { albumId: string; label: string; key: string; tagId: number | null }[] = []
@@ -184,8 +165,73 @@ JOIN album_tags x ON x.album_id = other.id
 JOIN tags t ON t.id = x.tag_id
 WHERE NOT EXISTS (SELECT 1 FROM album_tags cur WHERE cur.album_id = a.id AND cur.tag_id = t.id)`
 
+const REMAINING_SQL = `
+SELECT count(*) AS n FROM json_each(?1) sel
+JOIN albums a ON a.id = sel.value
+LEFT JOIN album_musicbrainz mb ON mb.album_id = a.id
+WHERE mb.album_id IS NULL
+   OR (mb.status = 'found' AND NOT EXISTS (SELECT 1 FROM suggestions s WHERE s.album_id = a.id AND s.source = 'ai'))`
+
+/** Albums dont la fiche MusicBrainz manque : le navigateur ira les chercher lui-même. */
+suggestRoutes.post('/suggestions/plan', async (c) => {
+  const albumIds = parseList(asObject(await c.req.json()).albumIds, 1000, parseSpotifyId)
+  if (albumIds.length === 0) throw badRequest('Aucun album.')
+  const db = c.env.DB
+  const selection = JSON.stringify(albumIds)
+  const [missing, remaining] = await db.batch<{ id: string; name: string; artists: string; n: number }>([
+    db
+      .prepare(
+        `SELECT a.id, a.name, a.artists FROM json_each(?1) sel
+         JOIN albums a ON a.id = sel.value
+         LEFT JOIN album_musicbrainz mb ON mb.album_id = a.id
+         WHERE mb.album_id IS NULL LIMIT ?2`,
+      )
+      .bind(selection, ENRICH_PER_RUN),
+    db.prepare(REMAINING_SQL).bind(selection),
+  ])
+  return c.json({
+    toEnrich: missing.results.map((row) => ({
+      id: row.id,
+      name: row.name,
+      artist: (JSON.parse(row.artists) as { name: string }[])[0]?.name ?? '',
+    })),
+    remaining: remaining.results[0]?.n ?? 0,
+  })
+})
+
+/** Enregistre les fiches MusicBrainz trouvées par le navigateur. */
+suggestRoutes.post('/suggestions/musicbrainz', async (c) => {
+  const records = parseList(asObject(await c.req.json()).records, 200, (raw): MusicBrainzRecord => {
+    const o = asObject(raw)
+    const text = (v: unknown, max: number) => (typeof v === 'string' && v.length <= max ? v : null)
+    return {
+      albumId: parseSpotifyId(o.albumId),
+      mbid: text(o.mbid, 64),
+      title: text(o.title, 500),
+      artist: text(o.artist, 500),
+      year: typeof o.year === 'number' && Number.isInteger(o.year) ? o.year : null,
+      status: o.status === 'found' ? 'found' : 'missing',
+    }
+  })
+  if (records.length === 0) return c.json({ saved: 0 })
+  const db = c.env.DB
+  await db
+    .prepare(
+      `INSERT INTO album_musicbrainz (album_id, mbid, title, artist, year, genres, status, fetched_at)
+       SELECT json_extract(value, '$.albumId'), json_extract(value, '$.mbid'), json_extract(value, '$.title'),
+              json_extract(value, '$.artist'), json_extract(value, '$.year'), '[]',
+              json_extract(value, '$.status'), ?2
+       FROM json_each(?1) WHERE true
+       ON CONFLICT(album_id) DO UPDATE SET mbid = excluded.mbid, title = excluded.title, artist = excluded.artist,
+         year = excluded.year, status = excluded.status, fetched_at = excluded.fetched_at`,
+    )
+    .bind(JSON.stringify(records), nowIso())
+    .run()
+  return c.json({ saved: records.length })
+})
+
 /**
- * Une passe d'analyse : enrichit quelques albums via MusicBrainz, puis en fait analyser un lot par l'IA.
+ * Une passe d'analyse : règle « même artiste » au premier appel, puis un lot d'albums soumis au modèle.
  * L'interface rappelle cette route jusqu'à ce qu'il ne reste plus rien à traiter.
  */
 suggestRoutes.post('/suggestions/run', async (c) => {
@@ -195,35 +241,7 @@ suggestRoutes.post('/suggestions/run', async (c) => {
   const db = c.env.DB
   const selection = JSON.stringify(albumIds)
 
-  // Règle « même artiste » : instantanée, elle tourne dès le premier appel.
   if (body.first === true) await db.prepare(SAME_ARTIST_SQL).bind(selection).run()
-
-  const { results: toEnrich } = await db
-    .prepare(
-      `SELECT a.id, a.name, a.artists FROM json_each(?1) sel
-       JOIN albums a ON a.id = sel.value
-       LEFT JOIN album_musicbrainz mb ON mb.album_id = a.id
-       WHERE mb.album_id IS NULL LIMIT ?2`,
-    )
-    .bind(selection, ENRICH_PER_RUN)
-    .all<AlbumToProcess>()
-
-  let unavailable = false
-  for (const [index, album] of toEnrich.entries()) {
-    if (index > 0) await sleep(musicBrainzThrottle)
-    const artist = (JSON.parse(album.artists) as { name: string }[])[0]?.name ?? ''
-    try {
-      const record = await lookupAlbum(album.name, artist)
-      await saveRecordStmt(db, album.id, record).run()
-    } catch (err) {
-      // Panne passagère : on ne marque pas l'album comme introuvable, il repassera plus tard.
-      if (err instanceof MusicBrainzUnavailable) {
-        unavailable = true
-        break
-      }
-      throw err
-    }
-  }
 
   const { results: toAnalyze } = await db
     .prepare(
@@ -237,8 +255,8 @@ suggestRoutes.post('/suggestions/run', async (c) => {
 
   let suggested = 0
   if (toAnalyze.length > 0) {
-    const [vocabulary, habits] = await Promise.all([tagVocabulary(db), genreHabits(db)])
-    const { system, user } = buildPrompt(toAnalyze, vocabulary, habits)
+    const vocabulary = await tagVocabulary(db)
+    const { system, user } = buildPrompt(toAnalyze, vocabulary)
     const answer = await c.env.AI.run(MODEL, {
       messages: [
         { role: 'system', content: system },
@@ -246,8 +264,7 @@ suggestRoutes.post('/suggestions/run', async (c) => {
       ],
       max_tokens: 900,
     })
-    const text = extractText(answer)
-    const parsed = parseModelAnswer(text)
+    const parsed = parseModelAnswer(extractText(answer))
     if (parsed.length === 0) console.log('Réponse du modèle non exploitable :', JSON.stringify(answer).slice(0, 800))
     suggested = await saveSuggestions(db, toAnalyze, parsed)
     // Les albums sans réponse exploitable ne doivent pas être analysés en boucle.
@@ -260,26 +277,9 @@ suggestRoutes.post('/suggestions/run', async (c) => {
       .run()
   }
 
-  const remaining = await db
-    .prepare(
-      `SELECT count(*) AS n FROM json_each(?1) sel
-       JOIN albums a ON a.id = sel.value
-       LEFT JOIN album_musicbrainz mb ON mb.album_id = a.id
-       WHERE mb.album_id IS NULL
-          OR (mb.status = 'found' AND NOT EXISTS (SELECT 1 FROM suggestions s WHERE s.album_id = a.id AND s.source = 'ai'))`,
-    )
-    .bind(selection)
-    .first<{ n: number }>()
-
+  const remaining = await db.prepare(REMAINING_SQL).bind(selection).first<{ n: number }>()
   const version = suggested > 0 ? versionFrom([await bumpVersionStmt(db).run()]) : null
-  return c.json({
-    enriched: toEnrich.length,
-    analyzed: toAnalyze.length,
-    suggested,
-    remaining: unavailable ? 0 : (remaining?.n ?? 0),
-    unavailable,
-    version,
-  })
+  return c.json({ analyzed: toAnalyze.length, suggested, remaining: remaining?.n ?? 0, version })
 })
 
 /** Propositions en attente, regroupées par album côté interface. */

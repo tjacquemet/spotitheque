@@ -44,11 +44,26 @@ export interface LibraryPayload {
   links: LinkRow[]
 }
 
+/** Fiche MusicBrainz d'un album, cherchée par le navigateur puis enregistrée par le Worker. */
+export interface MusicBrainzRecord {
+  albumId: string
+  mbid: string | null
+  title: string | null
+  artist: string | null
+  year: number | null
+  status: 'found' | 'missing'
+}
+
+export interface SuggestPlan {
+  /** Albums dont la fiche MusicBrainz manque encore. */
+  toEnrich: { id: string; name: string; artist: string }[]
+  remaining: number
+}
+
 /** Proposition de tag en attente : [albumId, nom proposé, id du tag s'il existe déjà, origine]. */
 export type SuggestionRow = [albumId: string, label: string, tagId: number | null, source: string]
 
 export interface SuggestRunResult {
-  enriched: number
   analyzed: number
   suggested: number
   remaining: number

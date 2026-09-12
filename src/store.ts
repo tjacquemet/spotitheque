@@ -3,6 +3,7 @@ import type { AlbumRow, LibraryPayload, SyncAlbum } from '../shared/api'
 import { normalizeTagName, tagSortKey } from '../shared/tags'
 import { api } from './api'
 import { idbDelete, idbGet, idbSet } from './lib/idb'
+import { lookupAlbums } from './lib/musicbrainz'
 import { SAVED_ALBUMS_URL, SpotifyTokenRejected, fetchSavedAlbumsPage, isUnchanged, toSyncAlbum } from './lib/spotify'
 import { compareText, normalize } from './lib/text'
 import type { Album, LibraryData, Tag } from './lib/types'
@@ -352,23 +353,36 @@ let suggesting = false
  * Analyse une liste d'albums par petites passes : enrichissement MusicBrainz puis appel au modèle.
  * L'appli rappelle le serveur tant qu'il reste des albums à traiter.
  */
-export async function runSuggestions(albumIds: string[]): Promise<{ suggested: number } | null> {
+export async function runSuggestions(albumIds: string[]): Promise<{ suggested: number; unavailable: boolean } | null> {
   if (suggesting || albumIds.length === 0) return null
   suggesting = true
   setState({ suggestRun: { done: 0, total: albumIds.length } })
   let suggested = 0
+  let unavailable = false
   try {
     let first = true
-    for (let pass = 0; pass < 400; pass++) {
+    for (let pass = 0; pass < 200; pass++) {
+      // Le navigateur cherche lui-même les fiches MusicBrainz, puis le serveur fait analyser le lot.
+      const plan = await api.suggestPlan(albumIds)
+      setState({ suggestRun: { done: Math.max(0, albumIds.length - plan.remaining), total: albumIds.length } })
+      if (plan.toEnrich.length > 0) {
+        const lookup = await lookupAlbums(plan.toEnrich)
+        if (lookup.records.length > 0) await api.saveMusicBrainz(lookup.records)
+        if (lookup.unavailable && lookup.records.length === 0) {
+          unavailable = true
+          break
+        }
+      }
       const result = await api.runSuggestions(albumIds, first)
       first = false
       suggested += result.suggested
       setState({ suggestRun: { done: Math.max(0, albumIds.length - result.remaining), total: albumIds.length } })
       if (result.remaining === 0) break
+      if (plan.toEnrich.length === 0 && result.analyzed === 0) break
     }
     await loadSuggestions()
     await refreshLibrary()
-    return { suggested }
+    return { suggested, unavailable }
   } finally {
     suggesting = false
     setState({ suggestRun: null })

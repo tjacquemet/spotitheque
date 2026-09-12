@@ -3,8 +3,10 @@ import type {
   Device,
   LibraryPayload,
   MeResponse,
+  MusicBrainzRecord,
   MutationResult,
   PlayResult,
+  SuggestPlan,
   SuggestRunResult,
   SuggestionRow,
   SyncAlbum,
@@ -93,6 +95,9 @@ export const api = {
     request<{ deleted: number; version: number }>('POST', '/albums/delete', { albumIds }),
 
   suggestions: () => request<{ items: SuggestionRow[] }>('GET', '/suggestions'),
+  suggestPlan: (albumIds: string[]) => request<SuggestPlan>('POST', '/suggestions/plan', { albumIds }),
+  saveMusicBrainz: (records: MusicBrainzRecord[]) =>
+    request<{ saved: number }>('POST', '/suggestions/musicbrainz', { records }),
   runSuggestions: (albumIds: string[], first: boolean) =>
     request<SuggestRunResult>('POST', '/suggestions/run', { albumIds, first }),
   acceptSuggestion: (albumId: string, label: string) =>
