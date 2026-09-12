@@ -357,7 +357,16 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
           onAnother={open?.random ? surprise : undefined}
         />
       )}
-      {bulkOpen && selection && <BulkTagSheet albumIds={[...selection]} onClose={() => setBulkOpen(false)} />}
+      {bulkOpen && selection && (
+        <BulkTagSheet
+          albumIds={[...selection]}
+          onClose={() => setBulkOpen(false)}
+          onDone={() => {
+            setBulkOpen(false)
+            setSelection(new Set())
+          }}
+        />
+      )}
     </>
   )
 }

@@ -5,8 +5,16 @@ import { toast, toastError } from '../toast'
 import { Sheet } from './Sheet'
 import { TagPicker } from './TagPicker'
 
+interface BulkTagSheetProps {
+  albumIds: string[]
+  /** Fermeture simple (croix, glissement, fond) : la sélection est conservée. */
+  onClose: () => void
+  /** « Terminé » : la sélection est vidée pour enchaîner sur d'autres albums. */
+  onDone: () => void
+}
+
 /** Ajoute ou retire un tag sur tous les albums sélectionnés, avec possibilité d'annuler. */
-export function BulkTagSheet({ albumIds, onClose }: { albumIds: string[]; onClose: () => void }) {
+export function BulkTagSheet({ albumIds, onClose, onDone }: BulkTagSheetProps) {
   const data = useLibrary((s) => s.data)
   if (!data) return null
 
@@ -49,7 +57,7 @@ export function BulkTagSheet({ albumIds, onClose }: { albumIds: string[]; onClos
       <p className="hint legend">
         <span className="legend-dot on" /> sur tous les albums <span className="legend-dot partial" /> sur une partie
       </p>
-      <button type="button" className="btn btn-block" onClick={onClose}>
+      <button type="button" className="btn btn-block" onClick={onDone}>
         Terminé
       </button>
     </Sheet>
