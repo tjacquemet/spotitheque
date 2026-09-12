@@ -15,8 +15,9 @@ const ENRICH_PER_RUN = 24
  * Version de la recherche dans les bases musicales. À incrémenter dès qu'elle s'améliore :
  * les fiches plus anciennes sont alors refaites, sans intervention sur la base.
  * 2 : insistance auprès de MusicBrainz après un refus, et récupération des genres.
+ * 3 : la CSP de l'appli bloquait toutes les requêtes vers les bases musicales.
  */
-const LOOKUP_VERSION = 2
+const LOOKUP_VERSION = 3
 /** Albums analysés par appel d'IA. */
 const ANALYZE_PER_RUN = 12
 const MODEL = '@cf/openai/gpt-oss-120b'

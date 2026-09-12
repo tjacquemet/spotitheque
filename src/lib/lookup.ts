@@ -71,6 +71,10 @@ class MusicBrainz {
   private pausedUntil = 0
   attempts = 0
   pauses = 0
+  /** Refus de débit (503, 429) : la base répond, elle demande d'attendre. */
+  refusals = 0
+  /** Requête qui n'est jamais partie : réseau coupé, ou bloquée par le navigateur (CSP). */
+  blocked = 0
 
   get available() {
     return Date.now() >= this.pausedUntil
@@ -90,6 +94,8 @@ class MusicBrainz {
         this.failures = 0
         return (body?.['release-groups'] ?? []) as ReleaseGroup[]
       }
+      if (!res) this.blocked++
+      else if (res.status === 503 || res.status === 429) this.refusals++
       // 503 et 429 sont des refus de débit : la tentative suivante passe généralement.
       if (res && res.status !== 503 && res.status !== 429) break
       await sleep(backoff)
@@ -116,23 +122,27 @@ interface WikidataHit {
  * Wikidata : données libres (CC0), sans bridage. La recherche ne porte que sur le titre — elle ne compare
  * qu'aux libellés — et c'est la description (« 1959 studio album by Miles Davis ») qui confirme l'artiste.
  */
-async function wikidataLookup(artist: string, title: string): Promise<MusicBrainzRecord | null> {
+async function wikidataLookup(artist: string, title: string): Promise<{ record: MusicBrainzRecord | null; blocked: boolean }> {
   const url = `${WD_API}?action=wbsearchentities&search=${encodeURIComponent(title)}&language=en&uselang=en&type=item&limit=20&format=json&origin=*`
   const res = await fetch(url).catch(() => null)
-  if (!res?.ok) return null
+  if (!res) return { record: null, blocked: true }
+  if (!res.ok) return { record: null, blocked: false }
   const body = await res.json().catch(() => null)
   const hits = (body?.search ?? []) as WikidataHit[]
   const wantedArtist = simplifyTitle(artist)
-  if (!wantedArtist) return null
+  if (!wantedArtist) return { record: null, blocked: false }
 
   const hit = hits.find((h) => {
     const description = simplifyTitle(h.description ?? '')
     const isRelease = description.includes('album') || description.includes(' ep') || description.endsWith(' ep')
     return isRelease && description.includes(wantedArtist)
   })
-  if (!hit) return null
+  if (!hit) return { record: null, blocked: false }
   const year = Number(hit.description?.match(/\b(19|20)\d{2}\b/)?.[0]) || null
-  return { albumId: '', mbid: `wikidata:${hit.id}`, title: hit.label, artist, year, genres: [], status: 'found' }
+  return {
+    record: { albumId: '', mbid: `wikidata:${hit.id}`, title: hit.label, artist, year, genres: [], status: 'found' },
+    blocked: false,
+  }
 }
 
 /**
@@ -153,6 +163,7 @@ export async function lookupAlbums(
   const musicBrainz = new MusicBrainz()
   const records: MusicBrainzRecord[] = []
   let viaWikidata = 0
+  let wikidataBlocked = 0
   let done = 0
 
   for (const [artist, list] of byArtist) {
@@ -182,11 +193,12 @@ export async function lookupAlbums(
         })
       } else {
         await sleep(WD_THROTTLE_MS)
-        const fromWikidata = await wikidataLookup(artist, album.name)
-        if (fromWikidata) viaWikidata++
+        const wikidata = await wikidataLookup(artist, album.name)
+        if (wikidata.record) viaWikidata++
+        if (wikidata.blocked) wikidataBlocked++
         records.push(
-          fromWikidata
-            ? { ...fromWikidata, albumId: album.id }
+          wikidata.record
+            ? { ...wikidata.record, albumId: album.id }
             : { albumId: album.id, mbid: null, title: null, artist: null, year: null, genres: [], status: 'missing' },
         )
       }
@@ -201,9 +213,14 @@ export async function lookupAlbums(
     found,
     viaWikidata,
     requetesMusicBrainz: musicBrainz.attempts,
+    refusMusicBrainz: musicBrainz.refusals,
+    // Requêtes qui ne sont jamais parties : réseau, ou navigateur qui les bloque (CSP).
+    bloquees: musicBrainz.blocked + wikidataBlocked,
     pausesMusicBrainz: musicBrainz.pauses,
     introuvables: records.filter((r) => r.status === 'missing').map((r) => r.albumId),
   })
-  // Aucun résultat alors que MusicBrainz s'est mis en pause : les bases refusent, ce n'est pas un manque de données.
-  return { records, unavailable: found === 0 && musicBrainz.pauses > 0 }
+  // Rien trouvé alors que les requêtes n'aboutissent pas : ces albums n'ont pas été cherchés, ils ne sont
+  // pas introuvables. On ne renvoie rien, pour ne pas enregistrer un « introuvable » qui n'en est pas un.
+  const unavailable = found === 0 && (musicBrainz.blocked + wikidataBlocked > 0 || musicBrainz.pauses > 0)
+  return { records: unavailable ? [] : records, unavailable }
 }

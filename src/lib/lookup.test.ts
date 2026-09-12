@@ -69,6 +69,22 @@ describe('lookupAlbums', () => {
     expect(unavailable).toBe(false)
   })
 
+  it("n'enregistre aucun « introuvable » quand les requêtes ne partent pas", async () => {
+    // Cas d'un blocage par le navigateur (CSP) ou d'un réseau coupé : fetch échoue avant d'émettre.
+    const fetchMock = vi.fn(() => Promise.reject(new TypeError('Failed to fetch')))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { records, unavailable } = await settle(
+      lookupAlbums([
+        { id: 'a1', name: 'Psychic', artist: 'Darkside' },
+        { id: 'a2', name: 'Echo', artist: 'Brandt Brauer Frick' },
+      ]),
+    )
+
+    expect(unavailable).toBe(true)
+    expect(records).toEqual([])
+  })
+
   it('se rabat sur Wikidata quand MusicBrainz ne répond pas', async () => {
     const fetchMock = vi.fn((input: string | URL) => {
       const url = String(input)
