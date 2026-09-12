@@ -15,6 +15,8 @@ interface TagFilterPanelProps {
   counts: Map<number, number>
   filters: Filters
   untaggedCount: number
+  /** « Sans tag » ou « Sans autre tag » selon qu'un tag est déjà sélectionné. */
+  untaggedLabel: string
   removedCount: number
   active: boolean
   onToggle: (id: number) => void
@@ -29,6 +31,7 @@ export function TagFilterPanel({
   counts,
   filters,
   untaggedCount,
+  untaggedLabel,
   removedCount,
   active,
   onToggle,
@@ -101,7 +104,7 @@ export function TagFilterPanel({
             aria-pressed={filters.untagged}
             onClick={() => setFilters((f) => ({ ...f, untagged: !f.untagged }))}
           >
-            <span className="tag-row-name">Sans tag</span>
+            <span className="tag-row-name">{untaggedLabel}</span>
             <span className="tag-row-count">{untaggedCount}</span>
           </button>
         </li>

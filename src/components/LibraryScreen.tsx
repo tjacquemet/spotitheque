@@ -70,10 +70,12 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
   )
   const counts = useMemo(() => (data ? countTags(results, data.links) : new Map<number, number>()), [data, results])
   const removedCount = useMemo(() => data?.albums.filter((a) => !a.inLibrary).length ?? 0, [data])
+  // Nombre d'albums qui resteraient en activant « Sans tag » / « Sans autre tag » avec les filtres actuels.
   const untaggedCount = useMemo(
-    () => data?.albums.filter((a) => a.inLibrary && !data.links.has(a.id)).length ?? 0,
-    [data],
+    () => (data ? filterAlbums(data.albums, data.links, { ...effective, untagged: true }).length : 0),
+    [data, effective],
   )
+  const untaggedLabel = effective.include.length > 0 ? 'Sans autre tag' : 'Sans tag'
   const active = hasActiveFilters(effective)
 
   // Hauteur réelle de l'en-tête : la colonne de tags se colle juste en dessous.
@@ -330,7 +332,7 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
               {activeTags.map(renderTag)}
               {activeTags.length > 0 && <span className="tagbar-sep" />}
               <TagChip
-                label="Sans tag"
+                label={untaggedLabel}
                 count={untaggedCount}
                 state={filters.untagged ? 'on' : 'off'}
                 onClick={() => setFilters((f) => ({ ...f, untagged: !f.untagged }))}
@@ -358,6 +360,7 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
               counts={counts}
               filters={effective}
               untaggedCount={untaggedCount}
+              untaggedLabel={untaggedLabel}
               removedCount={removedCount}
               active={active}
               onToggle={tapTag}
@@ -439,6 +442,7 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
             counts={counts}
             filters={effective}
             untaggedCount={untaggedCount}
+            untaggedLabel={untaggedLabel}
             removedCount={removedCount}
             active={active}
             onToggle={tapTag}

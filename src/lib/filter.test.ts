@@ -55,6 +55,14 @@ describe('filterAlbums', () => {
     expect(ids(filterAlbums(albums, links, { ...EMPTY_FILTERS, untagged: true }))).toEqual(['d'])
   })
 
+  it("combiné à un tag, ne garde que les albums qui n'ont pas d'autre tag", () => {
+    // « calme » seul : Vespertine (b) l'a seul, Kind of Blue (a) a aussi « jazz ».
+    expect(ids(filterAlbums(albums, links, { ...EMPTY_FILTERS, include: [CALME], untagged: true }))).toEqual(['b'])
+    expect(
+      ids(filterAlbums(albums, links, { ...EMPTY_FILTERS, include: [JAZZ, CALME], mode: 'or', untagged: true })),
+    ).toEqual(['a', 'b'])
+  })
+
   it('combine les tags inclus en ET par défaut', () => {
     expect(ids(filterAlbums(albums, links, { ...EMPTY_FILTERS, include: [JAZZ, CALME] }))).toEqual(['a'])
   })

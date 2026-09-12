@@ -9,7 +9,10 @@ export function filterAlbums(albums: Album[], links: Map<string, Set<number>>, f
   return albums.filter((album) => {
     if (album.inLibrary === f.removed) return false
     const tags = links.get(album.id) ?? NO_TAGS
-    if (f.untagged && tags.size > 0) return false
+    // « Sans tag » seul : aucun tag. Combiné à des tags : aucun tag en dehors de ceux demandés.
+    if (f.untagged) {
+      for (const tagId of tags) if (!f.include.includes(tagId)) return false
+    }
     if (f.include.length > 0) {
       const ok = f.mode === 'and' ? f.include.every((t) => tags.has(t)) : f.include.some((t) => tags.has(t))
       if (!ok) return false
