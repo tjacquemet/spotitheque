@@ -464,6 +464,87 @@ a {
   margin: 20px 0 2px;
 }
 
+/* --- Suggestions de tags --- */
+
+.suggest-btn {
+  position: relative;
+}
+
+.badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: grid;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.suggestion-list {
+  display: grid;
+  gap: 10px;
+  margin: 14px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.suggestion-card {
+  padding: 12px 14px 14px;
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.suggestion-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.suggestion-cover {
+  width: 54px;
+  flex: none;
+  border-radius: 6px;
+}
+
+.suggestion-meta {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+}
+
+.suggestion-meta strong,
+.suggestion-meta span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggestion-meta span {
+  color: var(--text-2);
+  font-size: 13px;
+}
+
+.chip.suggestion {
+  border: 1.5px dashed var(--tag);
+  background: transparent;
+  color: var(--text);
+}
+
+.chip.suggestion svg {
+  color: var(--accent);
+}
+
+.chip.suggestion.create {
+  --tag: var(--accent);
+  color: var(--accent);
+}
+
 .check-row {
   display: flex;
   align-items: flex-start;

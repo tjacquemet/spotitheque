@@ -15,13 +15,27 @@ export interface SyncProgress {
   total: number
 }
 
+export interface Suggestion {
+  label: string
+  tagId: number | null
+  source: string
+}
+
+export interface SuggestProgress {
+  done: number
+  total: number
+}
+
 interface State {
   data: LibraryData | null
   loadError: string | null
   sync: SyncProgress | null
+  /** Propositions de tags en attente, par album. */
+  suggestions: Map<string, Suggestion[]>
+  suggestRun: SuggestProgress | null
 }
 
-let state: State = { data: null, loadError: null, sync: null }
+let state: State = { data: null, loadError: null, sync: null, suggestions: new Map(), suggestRun: null }
 const listeners = new Set<() => void>()
 
 function setState(patch: Partial<State>) {
@@ -171,7 +185,7 @@ export async function loadLibrary(): Promise<void> {
 
 export async function resetLibrary(): Promise<void> {
   clearTimeout(persistTimer)
-  state = { data: null, loadError: null, sync: null }
+  state = { data: null, loadError: null, sync: null, suggestions: new Map(), suggestRun: null }
   listeners.forEach((listener) => listener())
   await idbDelete(CACHE_KEY)
 }
@@ -285,6 +299,80 @@ export async function importBackup(file: unknown) {
   const result = await enqueue(() => api.importTags(file))
   await refreshLibrary()
   return result
+}
+
+// --- Suggestions de tags ---
+
+export async function loadSuggestions(): Promise<void> {
+  const { items } = await api.suggestions()
+  const byAlbum = new Map<string, Suggestion[]>()
+  for (const [albumId, label, tagId, source] of items) {
+    const list = byAlbum.get(albumId) ?? []
+    list.push({ label, tagId, source })
+    byAlbum.set(albumId, list)
+  }
+  setState({ suggestions: byAlbum })
+}
+
+function dropSuggestion(albumId: string, label?: string) {
+  const suggestions = new Map(state.suggestions)
+  if (!label) suggestions.delete(albumId)
+  else {
+    const rest = (suggestions.get(albumId) ?? []).filter((s) => s.label !== label)
+    if (rest.length > 0) suggestions.set(albumId, rest)
+    else suggestions.delete(albumId)
+  }
+  setState({ suggestions })
+}
+
+/** Accepte une proposition : le tag est créé au besoin, posé sur l'album, et la proposition disparaît. */
+export function acceptSuggestion(albumId: string, label: string): Promise<void> {
+  dropSuggestion(albumId, label)
+  return enqueue(async () => {
+    const { tag, version } = await api.acceptSuggestion(albumId, label)
+    const d = state.data
+    if (d) {
+      const withTag = d.tagsById.has(tag.id) ? d : withTags(d, [...d.tags, tag])
+      const links = new Map(withTag.links)
+      links.set(albumId, new Set([...(links.get(albumId) ?? []), tag.id]))
+      setData({ ...withTag, links })
+    }
+    confirmVersion(version)
+  })
+}
+
+export function rejectSuggestion(albumId: string, label?: string): Promise<void> {
+  dropSuggestion(albumId, label)
+  return enqueue(() => api.rejectSuggestion(albumId, label).then(() => undefined))
+}
+
+let suggesting = false
+
+/**
+ * Analyse une liste d'albums par petites passes : enrichissement MusicBrainz puis appel au modèle.
+ * L'appli rappelle le serveur tant qu'il reste des albums à traiter.
+ */
+export async function runSuggestions(albumIds: string[]): Promise<{ suggested: number } | null> {
+  if (suggesting || albumIds.length === 0) return null
+  suggesting = true
+  setState({ suggestRun: { done: 0, total: albumIds.length } })
+  let suggested = 0
+  try {
+    let first = true
+    for (let pass = 0; pass < 400; pass++) {
+      const result = await api.runSuggestions(albumIds, first)
+      first = false
+      suggested += result.suggested
+      setState({ suggestRun: { done: Math.max(0, albumIds.length - result.remaining), total: albumIds.length } })
+      if (result.remaining === 0) break
+    }
+    await loadSuggestions()
+    await refreshLibrary()
+    return { suggested }
+  } finally {
+    suggesting = false
+    setState({ suggestRun: null })
+  }
 }
 
 // --- Synchronisation avec Spotify ---

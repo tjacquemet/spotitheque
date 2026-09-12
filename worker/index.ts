@@ -5,6 +5,7 @@ import { handleScheduled } from './cron'
 import { ApiError } from './errors'
 import { libraryRoutes } from './library'
 import { playerRoutes } from './player'
+import { suggestRoutes } from './suggest'
 import type { AppEnv } from './types'
 
 const app = new Hono<AppEnv>().basePath('/api')
@@ -32,6 +33,7 @@ app.use('*', requireSession)
 app.route('/', libraryRoutes)
 app.route('/', backupRoutes)
 app.route('/', playerRoutes)
+app.route('/', suggestRoutes)
 
 export default {
   fetch: app.fetch,

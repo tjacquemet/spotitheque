@@ -4,13 +4,14 @@ import { ApiError, api, onApiError } from './api'
 import { LibraryScreen } from './components/LibraryScreen'
 import { LoginScreen } from './components/LoginScreen'
 import { SettingsScreen } from './components/SettingsScreen'
+import { SuggestionsScreen } from './components/SuggestionsScreen'
 import { TagsScreen } from './components/TagsScreen'
 import { Toaster } from './components/Toaster'
 import { plural } from './lib/text'
-import { getLibrary, loadLibrary, refreshLibrary, resetLibrary, runSync } from './store'
+import { getLibrary, loadLibrary, loadSuggestions, refreshLibrary, resetLibrary, runSync } from './store'
 import { toast, toastError } from './toast'
 
-type Screen = 'library' | 'tags' | 'settings'
+type Screen = 'library' | 'tags' | 'settings' | 'suggestions'
 
 const DAY_MS = 86_400_000
 const QUICK_SYNC_EVERY_MS = 10 * 60_000
@@ -63,6 +64,7 @@ function Main({ me, setMe, onLogout }: MainProps) {
 
   useEffect(() => {
     void loadLibrary().then(autoSync)
+    void loadSuggestions().catch(() => undefined)
   }, [autoSync])
 
   // Retour au premier plan : données à jour (autre appareil) et nouveaux albums Spotify.
@@ -105,6 +107,7 @@ function Main({ me, setMe, onLogout }: MainProps) {
         <LibraryScreen spotify={me?.spotify ?? null} onNavigate={navigate} />
       </div>
       {screen === 'tags' && <TagsScreen onBack={() => navigate('library')} />}
+      {screen === 'suggestions' && <SuggestionsScreen onBack={() => navigate('library')} />}
       {screen === 'settings' && (
         <SettingsScreen
           me={me}

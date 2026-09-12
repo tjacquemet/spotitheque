@@ -3,12 +3,12 @@ import type { SpotifyStatus } from '../../shared/api'
 import { countTags, filterAlbums, hasActiveFilters, sortAlbums } from '../lib/filter'
 import { plural } from '../lib/text'
 import { EMPTY_FILTERS, type Filters, type SortKey, type Tag } from '../lib/types'
-import { deleteAlbums, refreshLibrary, runSync, useLibrary } from '../store'
+import { deleteAlbums, refreshLibrary, runSuggestions, runSync, useLibrary } from '../store'
 import { toast, toastError } from '../toast'
 import { AlbumGrid } from './AlbumGrid'
 import { AlbumSheet } from './AlbumSheet'
 import { BulkTagSheet } from './BulkTagSheet'
-import { CloseIcon, DiceIcon, DiscIcon, SearchIcon, SelectIcon, SettingsIcon, SyncIcon, TagIcon, TrashIcon } from './Icons'
+import { CloseIcon, DiceIcon, DiscIcon, SearchIcon, SelectIcon, SettingsIcon, SparkleIcon, SyncIcon, TagIcon, TrashIcon } from './Icons'
 import { Sheet } from './Sheet'
 import { TagChip, type ChipState } from './TagChip'
 import { TagFilterPanel } from './TagFilterPanel'
@@ -44,7 +44,7 @@ const newSeed = () => Math.floor(Math.random() * 2 ** 31)
 
 interface Props {
   spotify: SpotifyStatus | null
-  onNavigate: (screen: 'tags' | 'settings') => void
+  onNavigate: (screen: 'tags' | 'settings' | 'suggestions') => void
 }
 
 export function LibraryScreen({ spotify, onNavigate }: Props) {
@@ -63,6 +63,13 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
   const [open, setOpen] = useState<{ id: string; random: boolean } | null>(null)
   const [bulkOpen, setBulkOpen] = useState(false)
   const [tagPanelOpen, setTagPanelOpen] = useState(false)
+  const [suggestOpen, setSuggestOpen] = useState(false)
+  const suggestions = useLibrary((s) => s.suggestions)
+  const suggestRun = useLibrary((s) => s.suggestRun)
+  const pendingSuggestions = useMemo(
+    () => [...suggestions.values()].reduce((n, list) => n + list.length, 0),
+    [suggestions],
+  )
   const [hintSeen, setHintSeen] = useState(() => readStorage(HINT_STORAGE) === '1')
   const query = useDeferredValue(filters.query)
 
@@ -177,6 +184,29 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
       return
     }
     setOpen({ id: pool[Math.floor(Math.random() * pool.length)].id, random: true })
+  }
+
+  const analyze = () => {
+    const ids = results.map((a) => a.id)
+    if (ids.length === 0) {
+      toast('Aucun album à analyser avec ces filtres.')
+      return
+    }
+    if (ids.length > 150 && !window.confirm(`Analyser ${ids.length} albums ? Compte environ une minute par tranche de 20.`)) {
+      return
+    }
+    runSuggestions(ids)
+      .then((result) => {
+        if (!result) return
+        if (result.suggested === 0) {
+          toast('Aucune nouvelle proposition.')
+          return
+        }
+        toast(`${plural(result.suggested, 'proposition', 'propositions')} à valider`, {
+          action: { label: 'Voir', run: () => onNavigate('suggestions') },
+        })
+      })
+      .catch(toastError)
   }
 
   const syncNow = () => {
@@ -405,6 +435,16 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
               </option>
             ))}
           </select>
+          <button
+            type="button"
+            className="icon-btn suggest-btn"
+            onClick={() => setSuggestOpen(true)}
+            aria-label="Suggestions de tags"
+            title="Suggestions de tags"
+          >
+            <SparkleIcon />
+            {pendingSuggestions > 0 && <span className="badge">{pendingSuggestions}</span>}
+          </button>
           <button type="button" className="icon-btn accent" onClick={surprise} aria-label="Surprends-moi" title="Surprends-moi">
             <DiceIcon />
           </button>
@@ -440,6 +480,41 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
           onClose={() => setOpen(null)}
           onAnother={open?.random ? surprise : undefined}
         />
+      )}
+      {suggestOpen && (
+        <Sheet onClose={() => setSuggestOpen(false)} label="Suggestions de tags">
+          <h2 className="sheet-title">Suggestions de tags</h2>
+          <p className="hint">
+            Chaque album est retrouvé dans MusicBrainz, l'encyclopédie musicale libre, et c'est sa fiche — jamais les
+            données Spotify — qui est analysée avec la liste de tes tags. Tu valides ensuite chaque proposition.
+          </p>
+          {suggestRun ? (
+            <>
+              <div className="progress" aria-hidden="true">
+                <div style={{ width: `${suggestRun.total ? (100 * suggestRun.done) / suggestRun.total : 0}%` }} />
+              </div>
+              <p className="hint">
+                Analyse en cours : {suggestRun.done} / {suggestRun.total} albums. Tu peux fermer cette fenêtre, ça continue.
+              </p>
+            </>
+          ) : (
+            <button type="button" className="btn btn-primary btn-block" onClick={analyze}>
+              <SparkleIcon /> Analyser {plural(results.length, 'album affiché', 'albums affichés')}
+            </button>
+          )}
+          {pendingSuggestions > 0 && (
+            <button
+              type="button"
+              className="btn btn-block"
+              onClick={() => {
+                setSuggestOpen(false)
+                onNavigate('suggestions')
+              }}
+            >
+              Voir {plural(pendingSuggestions, 'proposition', 'propositions')}
+            </button>
+          )}
+        </Sheet>
       )}
       {tagPanelOpen && data && (
         <Sheet onClose={() => setTagPanelOpen(false)} label="Filtrer par tags">

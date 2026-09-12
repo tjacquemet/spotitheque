@@ -44,6 +44,17 @@ export interface LibraryPayload {
   links: LinkRow[]
 }
 
+/** Proposition de tag en attente : [albumId, nom proposé, id du tag s'il existe déjà, origine]. */
+export type SuggestionRow = [albumId: string, label: string, tagId: number | null, source: string]
+
+export interface SuggestRunResult {
+  enriched: number
+  analyzed: number
+  suggested: number
+  remaining: number
+  version: number | null
+}
+
 export type SpotifyStatus = 'connected' | 'reauth' | 'not_connected'
 
 export interface MeResponse {

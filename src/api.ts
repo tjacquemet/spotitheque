@@ -5,6 +5,8 @@ import type {
   MeResponse,
   MutationResult,
   PlayResult,
+  SuggestRunResult,
+  SuggestionRow,
   SyncAlbum,
   TagDto,
 } from '../shared/api'
@@ -89,6 +91,14 @@ export const api = {
     request<MutationResult>('POST', '/album-tags', { albumIds, add, remove }),
   deleteAlbums: (albumIds: string[]) =>
     request<{ deleted: number; version: number }>('POST', '/albums/delete', { albumIds }),
+
+  suggestions: () => request<{ items: SuggestionRow[] }>('GET', '/suggestions'),
+  runSuggestions: (albumIds: string[], first: boolean) =>
+    request<SuggestRunResult>('POST', '/suggestions/run', { albumIds, first }),
+  acceptSuggestion: (albumId: string, label: string) =>
+    request<{ tag: TagDto; version: number }>('POST', '/suggestions/accept', { albumId, label }),
+  rejectSuggestion: (albumId: string, label?: string) =>
+    request<{ ok: true }>('POST', '/suggestions/reject', { albumId, label }),
 
   devices: () => request<{ devices: Device[] }>('GET', '/devices'),
   play: (albumId: string, deviceId: string | null, clientKind: ClientKind) =>
