@@ -363,6 +363,7 @@ export async function runSuggestions(albumIds: string[]): Promise<{ suggested: n
   let unavailable = false
   try {
     let first = true
+    let lastRemaining = Number.POSITIVE_INFINITY
     for (let pass = 0; pass < 200; pass++) {
       // Le navigateur cherche lui-même les fiches MusicBrainz, puis le serveur fait analyser le lot.
       const plan = await api.suggestPlan(albumIds)
@@ -381,6 +382,9 @@ export async function runSuggestions(albumIds: string[]): Promise<{ suggested: n
       setState({ suggestRun: { done: Math.max(0, albumIds.length - result.remaining), total: albumIds.length } })
       if (result.remaining === 0) break
       if (plan.toEnrich.length === 0 && result.analyzed === 0) break
+      // Rien de nouveau cherché et le compte n'a pas bougé : insister ferait tourner le modèle pour rien.
+      if (plan.toEnrich.length === 0 && result.remaining >= lastRemaining) break
+      lastRemaining = result.remaining
     }
     await loadSuggestions()
     await refreshLibrary()

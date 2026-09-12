@@ -16,11 +16,19 @@ const ENRICH_PER_RUN = 24
  * les fiches plus anciennes sont alors refaites, sans intervention sur la base.
  * 2 : insistance auprès de MusicBrainz après un refus, et récupération des genres.
  * 3 : la CSP de l'appli bloquait toutes les requêtes vers les bases musicales.
+ * 4 : changement de modèle. Une fiche refaite efface aussi la marque « analysé, rien trouvé »,
+ *     posée à tort par l'ancien modèle qui ne répondait jamais — d'où ce numéro.
  */
-const LOOKUP_VERSION = 3
+const LOOKUP_VERSION = 4
 /** Albums analysés par appel d'IA. */
 const ANALYZE_PER_RUN = 12
-const MODEL = '@cf/openai/gpt-oss-120b'
+/**
+ * Modèles essayés dans l'ordre. Surtout pas de modèle « à raisonnement » (gpt-oss, qwen3) : ils dépensent
+ * plus de mille jetons à réfléchir avant d'écrire, et une réponse tronquée ne contient rien du tout.
+ * Ceux-ci répondent en moins de 300 jetons. Le second prend le relais si le premier déraille.
+ */
+const MODELS = ['@cf/meta/llama-3.3-70b-instruct-fp8-fast', '@cf/mistralai/mistral-small-3.1-24b-instruct']
+const MAX_TOKENS = 1200
 
 interface EnrichedAlbum {
   id: string
@@ -87,6 +95,9 @@ function extractText(answer: unknown): string {
   const content = o?.choices?.[0]?.message?.content
   return typeof content === 'string' ? content : ''
 }
+
+/** « length » signale une réponse coupée faute de jetons : le symptôme à reconnaître tout de suite. */
+const finishReason = (answer: unknown) => (answer as { choices?: { finish_reason?: string }[] })?.choices?.[0]?.finish_reason ?? null
 
 /** Isole le premier tableau JSON complet : le modèle ajoute parfois des crochets ou du texte en trop. */
 function extractJsonArray(text: string): string | null {
@@ -276,30 +287,37 @@ suggestRoutes.post('/suggestions/run', async (c) => {
   if (toAnalyze.length > 0) {
     const vocabulary = await tagVocabulary(db)
     const { system, user } = buildPrompt(toAnalyze, vocabulary)
-    const answer = await c.env.AI.run(MODEL, {
-      messages: [
-        { role: 'system', content: system },
-        { role: 'user', content: user },
-      ],
-      max_tokens: 900,
-    })
-    const parsed = parseModelAnswer(extractText(answer))
-    if (parsed.length === 0) {
+    let parsed: ModelSuggestion[] = []
+    for (const model of MODELS) {
+      const answer = await c.env.AI.run(model, {
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+        max_tokens: MAX_TOKENS,
+      })
+      parsed = parseModelAnswer(extractText(answer))
+      if (parsed.length > 0) break
       // Journalisé tel quel : c'est la seule trace exploitable quand le modèle répond hors format.
       await recordActivity(db, 'suggest.reponse_illisible', {
+        modele: model,
+        fin: finishReason(answer),
         albums: toAnalyze.map((a) => a.title),
-        reponse: extractText(answer).slice(0, 600) || JSON.stringify(answer).slice(0, 600),
+        reponse: extractText(answer).slice(0, 400) || JSON.stringify(answer).slice(0, 400),
       })
     }
     suggested = await saveSuggestions(db, toAnalyze, parsed)
-    // Les albums sans réponse exploitable ne doivent pas être analysés en boucle.
-    await db
-      .prepare(
-        `INSERT OR IGNORE INTO suggestions (album_id, label, label_key, tag_id, source, score, status)
-         SELECT value, '', '', NULL, 'ai', 0, 'rejected' FROM json_each(?1)`,
-      )
-      .bind(JSON.stringify(toAnalyze.map((a) => a.id)))
-      .run()
+    // Marque « analysé » posée seulement si un modèle a répondu : un album muet doit rester à traiter,
+    // sinon une panne passagère du modèle l'écarte définitivement des propositions.
+    if (parsed.length > 0) {
+      await db
+        .prepare(
+          `INSERT OR IGNORE INTO suggestions (album_id, label, label_key, tag_id, source, score, status)
+           SELECT value, '', '', NULL, 'ai', 0, 'rejected' FROM json_each(?1)`,
+        )
+        .bind(JSON.stringify(toAnalyze.map((a) => a.id)))
+        .run()
+    }
   }
 
   const remaining = await db.prepare(REMAINING_SQL).bind(selection, LOOKUP_VERSION).first<{ n: number }>()
