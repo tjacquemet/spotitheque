@@ -187,9 +187,9 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
   }
 
   const analyze = () => {
-    const ids = results.map((a) => a.id)
+    const ids = analysisIds
     if (ids.length === 0) {
-      toast('Aucun album à analyser avec ces filtres.')
+      toast('Aucun album à analyser.')
       return
     }
     if (ids.length > 150 && !window.confirm(`Analyser ${ids.length} albums ? Compte environ une minute par tranche de 20.`)) {
@@ -217,6 +217,16 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
 
   const openAlbum = open ? data?.albumsById.get(open.id) : undefined
   const selecting = selection !== null
+
+  // L'analyse porte sur la sélection quand il y en a une, sinon sur tout ce qui est affiché.
+  const analysisIds = useMemo(
+    () => (selection && selection.size > 0 ? [...selection] : results.map((a) => a.id)),
+    [selection, results],
+  )
+  const analysisLabel =
+    selection && selection.size > 0
+      ? plural(analysisIds.length, 'album sélectionné', 'albums sélectionnés')
+      : plural(analysisIds.length, 'album affiché', 'albums affichés')
 
   // Seuls les albums retirés de Spotify peuvent être supprimés de Spotithèque.
   const removedSelected = useMemo(
@@ -499,7 +509,7 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
             </>
           ) : (
             <button type="button" className="btn btn-primary btn-block" onClick={analyze}>
-              <SparkleIcon /> Analyser {plural(results.length, 'album affiché', 'albums affichés')}
+              <SparkleIcon /> Analyser {analysisLabel}
             </button>
           )}
           {pendingSuggestions > 0 && (
