@@ -80,7 +80,7 @@ export const api = {
   syncFinish: (allIds: string[]) => request<{ removed: number; version: number | null }>('POST', '/sync/finish', { allIds }),
 
   createTag: (name: string) => request<{ tag: TagDto; created: boolean; version: number }>('POST', '/tags', { name }),
-  updateTag: (id: number, patch: { name?: string; color?: string }) =>
+  updateTag: (id: number, patch: { name?: string; color?: string; isGenre?: boolean }) =>
     request<{ tag: TagDto; version: number }>('PATCH', `/tags/${id}`, patch),
   deleteTag: (id: number) => request<MutationResult>('DELETE', `/tags/${id}`, {}),
   mergeTag: (id: number, into: number) => request<MutationResult>('POST', `/tags/${id}/merge`, { into }),

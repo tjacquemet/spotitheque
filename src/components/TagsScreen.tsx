@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { Fragment, useMemo, useState, type FormEvent } from 'react'
 import { TAG_COLORS, TAG_NAME_MAX, normalizeTagName } from '../../shared/tags'
 import { countTags } from '../lib/filter'
 import { plural } from '../lib/text'
@@ -50,6 +50,18 @@ function TagEditSheet({ tag, count, tags, onClose }: { tag: Tag; count: number; 
         </button>
       </form>
 
+      <label className="check-row">
+        <input
+          type="checkbox"
+          checked={tag.isGenre}
+          onChange={(e) => updateTag(tag.id, { isGenre: e.target.checked }).catch(toastError)}
+        />
+        <span>
+          C'est un genre musical
+          <em>Les genres sont regroupés à la fin des listes de tags.</em>
+        </span>
+      </label>
+
       <h3 className="section-title">Couleur</h3>
       <div className="swatches">
         {TAG_COLORS.map((color) => (
@@ -100,6 +112,7 @@ export function TagsScreen({ onBack }: { onBack: () => void }) {
     [data],
   )
   const tags = data?.tags ?? []
+  const firstGenre = tags.findIndex((t) => t.isGenre)
   const editedTag = editing !== null ? data?.tagsById.get(editing) : undefined
 
   const create = (e: FormEvent) => {
@@ -141,15 +154,18 @@ export function TagsScreen({ onBack }: { onBack: () => void }) {
           <p className="empty">Aucun tag. Crée-en un ici ou depuis la fiche d'un album.</p>
         ) : (
           <ul className="list">
-            {tags.map((tag) => (
-              <li key={tag.id}>
-                <button type="button" className="row" onClick={() => setEditing(tag.id)}>
-                  <span className="row-dot" style={{ background: tag.color }} />
-                  <span className="row-label">{tag.name}</span>
-                  <span className="row-count">{plural(counts.get(tag.id) ?? 0, 'album', 'albums')}</span>
-                  <ChevronIcon size={16} className="row-chevron" />
-                </button>
-              </li>
+            {tags.map((tag, index) => (
+              <Fragment key={tag.id}>
+                {index === firstGenre && <li className="list-group-label">Genres</li>}
+                <li>
+                  <button type="button" className="row" onClick={() => setEditing(tag.id)}>
+                    <span className="row-dot" style={{ background: tag.color }} />
+                    <span className="row-label">{tag.name}</span>
+                    <span className="row-count">{plural(counts.get(tag.id) ?? 0, 'album', 'albums')}</span>
+                    <ChevronIcon size={16} className="row-chevron" />
+                  </button>
+                </li>
+              </Fragment>
             ))}
           </ul>
         )}

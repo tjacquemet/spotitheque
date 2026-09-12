@@ -20,6 +20,8 @@ export interface Tag {
   id: number
   name: string
   color: string
+  /** Tag de genre musical : regroupé en fin de liste, après les autres tags. */
+  isGenre: boolean
 }
 
 export interface LibraryData {

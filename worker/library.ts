@@ -32,7 +32,7 @@ const LIBRARY_QUERIES = [
   "SELECT CAST(value AS INTEGER) AS j FROM settings WHERE key = 'data_version'",
   `SELECT json_array(id, name, json(artists), image_url, image_url_large, release_date, total_tracks, added_at, in_library) AS j
    FROM albums`,
-  'SELECT json_array(id, name, color) AS j FROM tags ORDER BY name_key',
+  'SELECT json_array(id, name, color, is_genre) AS j FROM tags ORDER BY name_key',
   'SELECT json_array(album_id, tag_id) AS j FROM album_tags',
 ]
 
@@ -134,10 +134,21 @@ async function nextColor(db: D1Database): Promise<string> {
   return best
 }
 
+const TAG_FIELDS = 'id, name, color, is_genre AS isGenre'
+
+interface TagRecord {
+  id: number
+  name: string
+  color: string
+  isGenre: number
+}
+
+const toTagDto = (row: TagRecord): TagDto => ({ ...row, isGenre: row.isGenre === 1 })
+
 async function requireTag(db: D1Database, id: number): Promise<TagDto> {
-  const tag = await db.prepare('SELECT id, name, color FROM tags WHERE id = ?').bind(id).first<TagDto>()
+  const tag = await db.prepare(`SELECT ${TAG_FIELDS} FROM tags WHERE id = ?`).bind(id).first<TagRecord>()
   if (!tag) throw new ApiError(404, 'not_found', 'Tag introuvable.')
-  return tag
+  return toTagDto(tag)
 }
 
 const isUniqueViolation = (err: unknown) => String(err).includes('UNIQUE')
@@ -149,10 +160,10 @@ libraryRoutes.post('/tags', async (c) => {
   const color = body.color === undefined ? await nextColor(db) : parseColor(body.color)
   const results = await db.batch([
     db.prepare('INSERT INTO tags (name, name_key, color) VALUES (?, ?, ?) ON CONFLICT(name_key) DO NOTHING').bind(name, key, color),
-    db.prepare('SELECT id, name, color FROM tags WHERE name_key = ?').bind(key),
+    db.prepare(`SELECT ${TAG_FIELDS} FROM tags WHERE name_key = ?`).bind(key),
     bumpVersionStmt(db),
   ])
-  const tag = results[1].results[0] as TagDto
+  const tag = toTagDto(results[1].results[0] as TagRecord)
   return c.json({ tag, created: (results[0].meta.changes ?? 0) > 0, version: versionFrom(results) })
 })
 
@@ -172,14 +183,19 @@ libraryRoutes.patch('/tags/:id', async (c) => {
     sets.push('color = ?')
     binds.push(parseColor(body.color))
   }
+  if (body.isGenre !== undefined) {
+    if (typeof body.isGenre !== 'boolean') throw badRequest('isGenre doit être un booléen.')
+    sets.push('is_genre = ?')
+    binds.push(body.isGenre ? 1 : 0)
+  }
   if (sets.length === 0) throw badRequest('Rien à modifier.')
   try {
     const results = await db.batch([
       db.prepare(`UPDATE tags SET ${sets.join(', ')} WHERE id = ?`).bind(...binds, id),
-      db.prepare('SELECT id, name, color FROM tags WHERE id = ?').bind(id),
+      db.prepare(`SELECT ${TAG_FIELDS} FROM tags WHERE id = ?`).bind(id),
       bumpVersionStmt(db),
     ])
-    return c.json({ tag: results[1].results[0] as TagDto, version: versionFrom(results) })
+    return c.json({ tag: toTagDto(results[1].results[0] as TagRecord), version: versionFrom(results) })
   } catch (err) {
     if (isUniqueViolation(err)) throw new ApiError(409, 'tag_exists', 'Un tag porte déjà ce nom.')
     throw err

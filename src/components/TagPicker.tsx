@@ -62,9 +62,17 @@ export function TagPicker({ tags, stateOf, onToggle, onCreated, placeholder = 'C
         onKeyDown={onKeyDown}
       />
       <div className="chips-wrap">
-        {visible.map((tag) => (
-          <TagChip key={tag.id} label={tag.name} color={tag.color} state={stateOf(tag)} onClick={() => onToggle(tag)} />
-        ))}
+        {visible
+          .filter((tag) => !tag.isGenre)
+          .map((tag) => (
+            <TagChip key={tag.id} label={tag.name} color={tag.color} state={stateOf(tag)} onClick={() => onToggle(tag)} />
+          ))}
+        {visible.some((tag) => tag.isGenre) && <span className="chips-label">Genres</span>}
+        {visible
+          .filter((tag) => tag.isGenre)
+          .map((tag) => (
+            <TagChip key={tag.id} label={tag.name} color={tag.color} state={stateOf(tag)} onClick={() => onToggle(tag)} />
+          ))}
         {name && !exact && (
           <button type="button" className="chip create" onClick={create} disabled={creating}>
             + Créer « {name} »

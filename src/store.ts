@@ -64,9 +64,13 @@ function rowToAlbum([id, name, artists, image, imageLarge, releaseDate, totalTra
   }
 }
 
+/** Tags classés par nom, les genres musicaux regroupés à la fin. */
 function withTags(d: LibraryData, tags: Tag[]): LibraryData {
   const sorted = [...tags].sort(
-    (a, b) => compareText(tagSortKey(a.name), tagSortKey(b.name)) || compareText(a.name, b.name),
+    (a, b) =>
+      Number(a.isGenre) - Number(b.isGenre) ||
+      compareText(tagSortKey(a.name), tagSortKey(b.name)) ||
+      compareText(a.name, b.name),
   )
   return { ...d, tags: sorted, tagsById: new Map(sorted.map((t) => [t.id, t])) }
 }
@@ -80,14 +84,14 @@ export function fromPayload(p: LibraryPayload): LibraryData {
     set.add(tagId)
   }
   const base: LibraryData = { version: p.version, albums, albumsById: new Map(albums.map((a) => [a.id, a])), tags: [], tagsById: new Map(), links }
-  return withTags(base, p.tags.map(([id, name, color]) => ({ id, name, color })))
+  return withTags(base, p.tags.map(([id, name, color, isGenre]) => ({ id, name, color, isGenre: isGenre === 1 })))
 }
 
 function toPayload(d: LibraryData): LibraryPayload {
   return {
     version: d.version,
     albums: d.albums.map((a) => [a.id, a.name, a.artists, a.image, a.imageLarge, a.releaseDate, a.totalTracks, a.addedAt, a.inLibrary ? 1 : 0]),
-    tags: d.tags.map((t) => [t.id, t.name, t.color]),
+    tags: d.tags.map((t) => [t.id, t.name, t.color, t.isGenre ? 1 : 0]),
     links: [...d.links].flatMap(([albumId, tags]) => [...tags].map((tagId): [string, number] => [albumId, tagId])),
   }
 }
@@ -217,7 +221,7 @@ export function createTag(name: string): Promise<Tag> {
   })
 }
 
-export function updateTag(id: number, patch: { name?: string; color?: string }): Promise<void> {
+export function updateTag(id: number, patch: { name?: string; color?: string; isGenre?: boolean }): Promise<void> {
   const clean = patch.name !== undefined ? { ...patch, name: normalizeTagName(patch.name).name } : patch
   return optimistic(
     (d) => withTags(d, d.tags.map((t) => (t.id === id ? { ...t, ...clean } : t))),
