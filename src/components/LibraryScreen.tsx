@@ -273,8 +273,12 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
               <strong className="topbar-title">{plural(selection.size, 'sélectionné', 'sélectionnés')}</strong>
             </>
           ) : (
-            /* Actions à gauche, à portée du pouce ; le titre passe à droite. */
+            /* Titre puis actions, groupés à gauche et à portée du pouce. */
             <>
+              <div className="brand">
+                <DiscIcon size={22} className={sync ? 'spin' : undefined} />
+                Spotithèque
+              </div>
               <button type="button" className="icon-btn" onClick={() => setSelection(new Set())} aria-label="Sélectionner des albums">
                 <SelectIcon />
               </button>
@@ -290,10 +294,6 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
                   {sync.full ? `Synchro ${sync.done}/${sync.total}` : 'Synchro…'}
                 </span>
               )}
-              <div className="brand">
-                <DiscIcon size={22} className={sync ? 'spin' : undefined} />
-                Spotithèque
-              </div>
             </>
           )}
         </div>

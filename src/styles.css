@@ -531,8 +531,13 @@ a {
   }
 }
 
-.clear-filters {
+.clear-filters,
+.new-tag {
   justify-self: start;
+}
+
+.new-tag-form {
+  margin-top: 0;
 }
 
 .panel-mode {

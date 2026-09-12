@@ -1,6 +1,10 @@
-import { useState } from 'react'
+import { useState, type FormEvent } from 'react'
+import { TAG_NAME_MAX, normalizeTagName } from '../../shared/tags'
 import { normalize, plural } from '../lib/text'
 import type { Filters, Tag } from '../lib/types'
+import { createTag } from '../store'
+import { toast, toastError } from '../toast'
+import { PlusIcon } from './Icons'
 import { TagFilterList } from './TagFilterList'
 
 /** Au-delà de ce nombre de tags, un champ de recherche apparaît au-dessus de la liste. */
@@ -33,11 +37,51 @@ export function TagFilterPanel({
   onClear,
 }: TagFilterPanelProps) {
   const [query, setQuery] = useState('')
+  const [newName, setNewName] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
   const q = normalize(query.trim())
   const visible = q ? tags.filter((t) => normalize(t.name).includes(q)) : tags
 
+  const create = async (e: FormEvent) => {
+    e.preventDefault()
+    const name = normalizeTagName(newName ?? '').name
+    if (!name || busy) return
+    setBusy(true)
+    try {
+      const tag = await createTag(name)
+      toast(`Tag « ${tag.name} » créé`)
+      setNewName(null)
+    } catch (err) {
+      toastError(err)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="tag-panel">
+      {newName === null ? (
+        <button type="button" className="btn btn-sm new-tag" onClick={() => setNewName('')}>
+          <PlusIcon size={16} /> Nouveau tag
+        </button>
+      ) : (
+        <form className="inline-form new-tag-form" onSubmit={create}>
+          <input
+            className="input input-sm"
+            autoFocus
+            value={newName}
+            maxLength={TAG_NAME_MAX}
+            placeholder="Nom du tag"
+            aria-label="Nom du nouveau tag"
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Escape' && setNewName(null)}
+          />
+          <button type="submit" className="btn btn-sm btn-primary" disabled={!newName.trim() || busy}>
+            Créer
+          </button>
+        </form>
+      )}
+
       {tags.length > SEARCH_THRESHOLD && (
         <input
           className="input input-sm"
