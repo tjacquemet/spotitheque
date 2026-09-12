@@ -32,6 +32,7 @@ export type AlbumRow = [
   totalTracks: number | null,
   addedAt: string | null,
   inLibrary: 0 | 1,
+  lastPlayedAt: string | null,
 ]
 export type TagRow = [id: number, name: string, color: string, isGenre: 0 | 1]
 export type LinkRow = [albumId: string, tagId: number]

@@ -3,6 +3,7 @@ import type { MeResponse, MutationResult, TagDto } from '../shared/api'
 import { TAG_COLORS } from '../shared/tags'
 import { bumpVersionStmt, getSetting, nowIso, setSettingStmt, versionFrom } from './db'
 import { ApiError, badRequest } from './errors'
+import { collectRecentPlays } from './plays'
 import { getTokens } from './spotify'
 import type { AppEnv } from './types'
 import { asObject, parseColor, parseList, parseSpotifyId, parseSyncAlbum, parseTagId, parseTagName } from './validate'
@@ -21,6 +22,9 @@ libraryRoutes.get('/me', async (c) => {
   })
 })
 
+/** Relève l'historique d'écoute (appelé à l'ouverture de l'appli, et toutes les 30 minutes par la tâche planifiée). */
+libraryRoutes.post('/plays/poll', async (c) => c.json(await collectRecentPlays(c.env)))
+
 /** Jeton d'accès temporaire : le navigateur lit lui-même la bibliothèque Spotify (réponses trop lourdes pour le Worker). */
 libraryRoutes.get('/spotify/token', async (c) => {
   const tokens = await getTokens(c.env)
@@ -30,7 +34,7 @@ libraryRoutes.get('/spotify/token', async (c) => {
 // Chaque ligne est sérialisée en JSON par SQLite : le Worker ne fait que concaténer (limite de 10 ms de CPU).
 const LIBRARY_QUERIES = [
   "SELECT CAST(value AS INTEGER) AS j FROM settings WHERE key = 'data_version'",
-  `SELECT json_array(id, name, json(artists), image_url, image_url_large, release_date, total_tracks, added_at, in_library) AS j
+  `SELECT json_array(id, name, json(artists), image_url, image_url_large, release_date, total_tracks, added_at, in_library, last_played_at) AS j
    FROM albums`,
   'SELECT json_array(id, name, color, is_genre) AS j FROM tags ORDER BY name_key',
   'SELECT json_array(album_id, tag_id) AS j FROM album_tags',
@@ -53,7 +57,7 @@ libraryRoutes.get('/library', async (c) => {
 })
 
 // N'écrit que les albums nouveaux ou modifiés (la clause WHERE du DO UPDATE ignore les lignes identiques).
-const UPSERT_ALBUMS = `
+export const UPSERT_ALBUMS = `
 INSERT INTO albums (id, name, artists, image_url, image_url_large, release_date, total_tracks, upc, added_at, in_library, synced_at)
 SELECT json_extract(value, '$.id'), json_extract(value, '$.name'), json_extract(value, '$.artists'),
        json_extract(value, '$.image'), json_extract(value, '$.imageLarge'), json_extract(value, '$.releaseDate'),

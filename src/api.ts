@@ -76,6 +76,7 @@ export const api = {
   },
 
   spotifyToken: () => request<{ accessToken: string; expiresAt: number }>('GET', '/spotify/token'),
+  pollPlays: () => request<{ updated: number; scopeMissing: boolean }>('POST', '/plays/poll', {}),
   syncAlbums: (albums: SyncAlbum[]) => request<{ changes: number; version: number | null }>('POST', '/sync/albums', { albums }),
   syncFinish: (allIds: string[]) => request<{ removed: number; version: number | null }>('POST', '/sync/finish', { allIds }),
 

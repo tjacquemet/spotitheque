@@ -12,6 +12,8 @@ export interface Album {
   totalTracks: number | null
   addedAt: string | null
   inLibrary: boolean
+  /** Dernière écoute connue, relevée dans l'historique Spotify. */
+  lastPlayedAt: string | null
   /** Titre + artistes normalisés, pour la recherche. */
   searchText: string
 }
@@ -34,7 +36,7 @@ export interface LibraryData {
   links: Map<string, Set<number>>
 }
 
-export type SortKey = 'added' | 'artist' | 'title' | 'year' | 'random'
+export type SortKey = 'played' | 'added' | 'artist' | 'title' | 'year' | 'random'
 
 export interface Filters {
   query: string

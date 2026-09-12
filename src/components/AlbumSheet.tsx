@@ -131,6 +131,7 @@ export function AlbumSheet({ album, spotify, onClose, onAnother }: AlbumSheetPro
   const data = useLibrary((s) => s.data)
   const albumTags = data?.links.get(album.id) ?? EMPTY
   const added = formatDate(album.addedAt)
+  const played = formatDate(album.lastPlayedAt)
   const meta = [album.year, album.totalTracks ? plural(album.totalTracks, 'titre', 'titres') : null].filter(Boolean).join(' · ')
 
   const toggle = (tag: Tag) => {
@@ -159,6 +160,7 @@ export function AlbumSheet({ album, spotify, onClose, onAnother }: AlbumSheetPro
           <p className="album-artist">{album.artistNames}</p>
           {meta && <p className="album-meta">{meta}</p>}
           {added && <p className="album-meta">Ajouté le {added}</p>}
+          {played && <p className="album-meta">Écouté le {played}</p>}
           {!album.inLibrary && <p className="album-meta warn">Retiré de ta bibliothèque Spotify</p>}
         </div>
       </div>

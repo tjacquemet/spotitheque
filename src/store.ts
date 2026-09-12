@@ -45,7 +45,18 @@ export const getLibrary = () => state.data
 
 // --- Conversion entre la réponse compacte du serveur et les structures de l'interface ---
 
-function rowToAlbum([id, name, artists, image, imageLarge, releaseDate, totalTracks, addedAt, inLibrary]: AlbumRow): Album {
+function rowToAlbum([
+  id,
+  name,
+  artists,
+  image,
+  imageLarge,
+  releaseDate,
+  totalTracks,
+  addedAt,
+  inLibrary,
+  lastPlayedAt,
+]: AlbumRow): Album {
   const artistNames = artists.map((a) => a.name).join(', ')
   const year = releaseDate ? Number(releaseDate.slice(0, 4)) || null : null
   return {
@@ -60,6 +71,7 @@ function rowToAlbum([id, name, artists, image, imageLarge, releaseDate, totalTra
     totalTracks,
     addedAt,
     inLibrary: inLibrary === 1,
+    lastPlayedAt: lastPlayedAt ?? null,
     searchText: normalize(`${name} ${artistNames}`),
   }
 }
@@ -90,7 +102,18 @@ export function fromPayload(p: LibraryPayload): LibraryData {
 function toPayload(d: LibraryData): LibraryPayload {
   return {
     version: d.version,
-    albums: d.albums.map((a) => [a.id, a.name, a.artists, a.image, a.imageLarge, a.releaseDate, a.totalTracks, a.addedAt, a.inLibrary ? 1 : 0]),
+    albums: d.albums.map((a) => [
+      a.id,
+      a.name,
+      a.artists,
+      a.image,
+      a.imageLarge,
+      a.releaseDate,
+      a.totalTracks,
+      a.addedAt,
+      a.inLibrary ? 1 : 0,
+      a.lastPlayedAt,
+    ]),
     tags: d.tags.map((t) => [t.id, t.name, t.color, t.isGenre ? 1 : 0]),
     links: [...d.links].flatMap(([albumId, tags]) => [...tags].map((tagId): [string, number] => [albumId, tagId])),
   }

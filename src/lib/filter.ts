@@ -41,6 +41,9 @@ const firstArtist = (a: Album) => a.artists[0]?.name ?? ''
 export function sortAlbums(albums: Album[], sort: SortKey, seed = 0): Album[] {
   const list = [...albums]
   switch (sort) {
+    // Écoutes les plus récentes d'abord ; les albums jamais relevés ferment la marche.
+    case 'played':
+      return list.sort((a, b) => (b.lastPlayedAt ?? '').localeCompare(a.lastPlayedAt ?? '') || (b.addedAt ?? '').localeCompare(a.addedAt ?? ''))
     case 'added':
       return list.sort((a, b) => (b.addedAt ?? '').localeCompare(a.addedAt ?? ''))
     case 'artist':

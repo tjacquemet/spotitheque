@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { authRoutes, requireSession } from './auth'
 import { backupRoutes } from './backup'
+import { handleScheduled } from './cron'
 import { ApiError } from './errors'
 import { libraryRoutes } from './library'
 import { playerRoutes } from './player'
@@ -32,4 +33,9 @@ app.route('/', libraryRoutes)
 app.route('/', backupRoutes)
 app.route('/', playerRoutes)
 
-export default app
+export default {
+  fetch: app.fetch,
+  scheduled: (event: ScheduledController, env: Env, ctx: ExecutionContext) => {
+    ctx.waitUntil(handleScheduled(event, env))
+  },
+}

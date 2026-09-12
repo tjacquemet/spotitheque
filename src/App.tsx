@@ -30,6 +30,7 @@ interface MainProps {
 
 function Main({ me, setMe, onLogout }: MainProps) {
   const [screen, setScreen] = useState<Screen>('library')
+  const [scopeMissing, setScopeMissing] = useState(false)
   const libraryScroll = useRef(0)
   const lastSync = useRef(0)
   const meRef = useRef(me)
@@ -46,10 +47,15 @@ function Main({ me, setMe, onLogout }: MainProps) {
     const wasEmpty = (getLibrary()?.albums.length ?? 0) === 0
     try {
       const result = await runSync(full)
-      if (!result) return
-      if (full) setMe((m) => (m ? { ...m, lastFullSync: new Date().toISOString() } : m))
-      if (wasEmpty) toast(`Import terminé : ${plural(getLibrary()?.albums.length ?? 0, 'album', 'albums')}`)
-      else if (result.added > 0) toast(plural(result.added, 'nouvel album', 'nouveaux albums'))
+      if (result) {
+        if (full) setMe((m) => (m ? { ...m, lastFullSync: new Date().toISOString() } : m))
+        if (wasEmpty) toast(`Import terminé : ${plural(getLibrary()?.albums.length ?? 0, 'album', 'albums')}`)
+        else if (result.added > 0) toast(plural(result.added, 'nouvel album', 'nouveaux albums'))
+      }
+      // Historique d'écoute : Spotify ne garde que les 50 derniers titres, on relève à chaque ouverture.
+      const plays = await api.pollPlays()
+      setScopeMissing(plays.scopeMissing)
+      if (plays.updated > 0) await refreshLibrary()
     } catch (err) {
       if (!(err instanceof ApiError && err.code === 'spotify_reauth')) toastError(err)
     }
@@ -88,6 +94,12 @@ function Main({ me, setMe, onLogout }: MainProps) {
         </div>
       )}
       {me === null && <div className="banner">Hors connexion : affichage de la dernière version enregistrée.</div>}
+      {scopeMissing && me?.spotify === 'connected' && (
+        <div className="banner" role="status">
+          <span>Pour trier par écoute récente, Spotithèque a besoin d'accéder à ton historique d'écoute.</span>
+          <a href="/api/auth/login">Autoriser</a>
+        </div>
+      )}
       {/* La bibliothèque reste montée pour garder filtres et position en revenant des autres écrans. */}
       <div hidden={screen !== 'library'}>
         <LibraryScreen spotify={me?.spotify ?? null} onNavigate={navigate} />

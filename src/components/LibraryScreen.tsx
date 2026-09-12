@@ -15,7 +15,14 @@ import { TagFilterPanel } from './TagFilterPanel'
 
 const SORT_STORAGE = 'spotitheque.sort'
 const HINT_STORAGE = 'spotitheque.hint-exclude'
-const SORTS: Record<SortKey, string> = { added: 'Ajout', artist: 'Artiste', title: 'Titre', year: 'Année', random: 'Aléatoire' }
+const SORTS: Record<SortKey, string> = {
+  played: 'Écoute',
+  added: 'Ajout',
+  artist: 'Artiste',
+  title: 'Titre',
+  year: 'Année',
+  random: 'Aléatoire',
+}
 
 function readStorage(key: string): string | null {
   try {

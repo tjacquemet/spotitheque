@@ -16,6 +16,7 @@ function album(id: string, name: string, artist: string, extra: Partial<Album> =
     totalTracks: null,
     addedAt: null,
     inLibrary: true,
+    lastPlayedAt: null,
     searchText: normalize(`${name} ${artist}`),
     ...extra,
   }

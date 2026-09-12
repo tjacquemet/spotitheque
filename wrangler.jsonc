@@ -21,6 +21,11 @@
     // Client ID de l'app Spotify (non secret). Le Client Secret est un secret Wrangler.
     "SPOTIFY_CLIENT_ID": "0a933ff40fa84b7f87c2a8e0ecbc19db"
   },
+  "triggers": {
+    // Relevé des écoutes récentes (Spotify ne garde que les 50 derniers titres)
+    // et synchro quotidienne des nouveaux albums, sans attendre l'ouverture de l'appli.
+    "crons": ["*/30 * * * *", "15 4 * * *"]
+  },
   "observability": {
     "enabled": true
   }

@@ -50,6 +50,7 @@ describe('isUnchanged', () => {
     artistNames: 'Miles Davis',
     year: 1959,
     inLibrary: true,
+    lastPlayedAt: null,
     searchText: 'kind of blue miles davis',
   }
 
