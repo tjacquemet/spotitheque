@@ -201,8 +201,8 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
         if (result.unavailable) {
           toast(
             result.suggested > 0
-              ? `${plural(result.suggested, 'proposition', 'propositions')} — MusicBrainz sature, relance plus tard pour le reste.`
-              : 'MusicBrainz est saturé pour le moment : relance l’analyse dans quelques minutes.',
+              ? `${plural(result.suggested, 'proposition', 'propositions')} — les bases musicales limitent les recherches, relance pour le reste.`
+              : 'Les bases musicales limitent les recherches en ce moment : relance dans quelques minutes.',
             { tone: 'error', duration: 8000 },
           )
           return
