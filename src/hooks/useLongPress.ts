@@ -17,7 +17,8 @@ export function useLongPress(onLongPress: () => void, onClick: () => void) {
 
   return {
     onPointerDown: (e: PointerEvent) => {
-      if (e.button !== 0) return
+      // À la souris, la sélection multiple se fait par rectangle : pas d'appui long.
+      if (e.button !== 0 || e.pointerType === 'mouse') return
       fired.current = false
       origin.current = { x: e.clientX, y: e.clientY }
       timer.current = setTimeout(() => {

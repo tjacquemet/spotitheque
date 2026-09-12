@@ -21,3 +21,11 @@ export function normalizeTagName(raw: string): { name: string; key: string } {
   const name = raw.normalize('NFC').replace(/\s+/g, ' ').trim()
   return { name, key: name.toLocaleLowerCase('fr-FR') }
 }
+
+/** Emoji, symboles et ponctuation en début de nom, ignorés pour le classement. */
+const LEADING_DECORATION = /^[\p{Extended_Pictographic}\p{S}\p{P}\p{Z}️‍]+/u
+
+/** Clé de tri d'un tag : « 🎷 jazz » se range à « jazz », pas au début de la liste. */
+export function tagSortKey(name: string): string {
+  return name.replace(LEADING_DECORATION, '').trim() || name
+}

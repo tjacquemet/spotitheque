@@ -253,6 +253,7 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
         selection={selection}
         onOpen={onOpen}
         onSelect={onSelect}
+        onSelectionChange={setSelection}
       />
     )
   }

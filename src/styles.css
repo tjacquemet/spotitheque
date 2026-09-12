@@ -614,10 +614,27 @@ a {
 /* --- Grille d'albums --- */
 
 .grid {
+  position: relative;
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
   gap: 16px 10px;
   padding: 4px var(--pad) 24px;
+}
+
+/* Rectangle de sélection à la souris. */
+.grid.banding {
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: crosshair;
+}
+
+.band {
+  position: absolute;
+  z-index: 5;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  pointer-events: none;
 }
 
 @media (min-width: 700px) {

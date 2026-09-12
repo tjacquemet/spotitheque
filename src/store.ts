@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import type { AlbumRow, LibraryPayload, SyncAlbum } from '../shared/api'
-import { normalizeTagName } from '../shared/tags'
+import { normalizeTagName, tagSortKey } from '../shared/tags'
 import { api } from './api'
 import { idbDelete, idbGet, idbSet } from './lib/idb'
 import { SAVED_ALBUMS_URL, SpotifyTokenRejected, fetchSavedAlbumsPage, isUnchanged, toSyncAlbum } from './lib/spotify'
@@ -65,7 +65,9 @@ function rowToAlbum([id, name, artists, image, imageLarge, releaseDate, totalTra
 }
 
 function withTags(d: LibraryData, tags: Tag[]): LibraryData {
-  const sorted = [...tags].sort((a, b) => compareText(a.name, b.name))
+  const sorted = [...tags].sort(
+    (a, b) => compareText(tagSortKey(a.name), tagSortKey(b.name)) || compareText(a.name, b.name),
+  )
   return { ...d, tags: sorted, tagsById: new Map(sorted.map((t) => [t.id, t])) }
 }
 

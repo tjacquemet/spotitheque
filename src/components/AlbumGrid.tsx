@@ -1,4 +1,5 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
+import { useBandSelect } from '../hooks/useBandSelect'
 import { useLongPress } from '../hooks/useLongPress'
 import type { Album, Tag } from '../lib/types'
 import { AlbumCover } from './AlbumCover'
@@ -25,6 +26,7 @@ const AlbumCard = memo(function AlbumCard({ album, tags, selecting, selected, on
   return (
     <button
       type="button"
+      data-album={album.id}
       className={`card${selected ? ' selected' : ''}${album.inLibrary ? '' : ' removed'}`}
       aria-pressed={selecting ? selected : undefined}
       aria-label={`${album.name}, ${album.artistNames}`}
@@ -57,12 +59,16 @@ interface GridProps {
   selection: Set<string> | null
   onOpen: (id: string) => void
   onSelect: (id: string) => void
+  /** Sélection par rectangle à la souris. */
+  onSelectionChange: (next: Set<string>) => void
 }
 
 /** Grille de pochettes, rendue par tranches au fil du défilement. */
-export function AlbumGrid({ albums, links, tagsById, selection, onOpen, onSelect }: GridProps) {
+export function AlbumGrid({ albums, links, tagsById, selection, onOpen, onSelect, onSelectionChange }: GridProps) {
   const [limit, setLimit] = useState(PAGE_SIZE)
   const sentinel = useRef<HTMLDivElement>(null)
+  const grid = useRef<HTMLDivElement>(null)
+  const { rect, handlers } = useBandSelect(grid, selection, onSelectionChange)
 
   // Seuls les albums modifiés reçoivent un nouveau Set de tags : les autres cartes ne se re-rendent pas.
   const tagCache = useMemo(() => new WeakMap<Set<number>, Tag[]>(), [tagsById])
@@ -93,7 +99,8 @@ export function AlbumGrid({ albums, links, tagsById, selection, onOpen, onSelect
 
   return (
     <>
-      <div className="grid">
+      <div className={`grid${rect ? ' banding' : ''}`} ref={grid} {...handlers}>
+        {rect && <div className="band" style={rect} aria-hidden="true" />}
         {albums.slice(0, limit).map((album) => {
           return (
             <AlbumCard
