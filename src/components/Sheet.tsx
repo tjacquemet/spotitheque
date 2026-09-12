@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { CloseIcon } from './Icons'
 
@@ -25,27 +25,32 @@ export function Sheet({ onClose, label, children }: { onClose: () => void; label
     }
   }, [onClose])
 
-  const startDrag = (e: PointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0) return
-    drag.current = { startY: e.clientY, dy: 0 }
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId)
-    } catch {
-      // Le glissement fonctionne aussi sans capture du pointeur.
+  // Le glissement est suivi au niveau de la fenêtre plutôt que par capture du pointeur :
+  // une capture détournerait le clic suivant, et la croix ne répondrait plus.
+  useEffect(() => {
+    const onMove = (e: PointerEvent) => {
+      if (!drag.current) return
+      drag.current.dy = Math.max(0, e.clientY - drag.current.startY)
+      setOffset(drag.current.dy)
     }
-  }
+    const onUp = () => {
+      const dy = drag.current?.dy ?? 0
+      drag.current = null
+      setOffset(0)
+      if (dy > DISMISS_DISTANCE) onClose()
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+    window.addEventListener('pointercancel', onUp)
+    return () => {
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      window.removeEventListener('pointercancel', onUp)
+    }
+  }, [onClose])
 
-  const moveDrag = (e: PointerEvent<HTMLDivElement>) => {
-    if (!drag.current) return
-    drag.current.dy = Math.max(0, e.clientY - drag.current.startY)
-    setOffset(drag.current.dy)
-  }
-
-  const endDrag = () => {
-    const dy = drag.current?.dy ?? 0
-    drag.current = null
-    setOffset(0)
-    if (dy > DISMISS_DISTANCE) onClose()
+  const startDrag = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (e.button === 0) drag.current = { startY: e.clientY, dy: 0 }
   }
 
   return createPortal(
@@ -58,7 +63,7 @@ export function Sheet({ onClose, label, children }: { onClose: () => void; label
         onClick={(e) => e.stopPropagation()}
         style={offset > 0 ? { transform: `translateY(${offset}px)`, transition: 'none' } : undefined}
       >
-        <div className="sheet-top" onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={endDrag} onPointerCancel={endDrag}>
+        <div className="sheet-top" onPointerDown={startDrag}>
           <button type="button" className="sheet-handle" onClick={onClose} aria-label="Fermer">
             <span />
           </button>
