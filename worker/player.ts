@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import type { ClientKind, Device, PlayResult } from '../shared/api'
 import { pickDevice } from '../shared/devices'
+import { recordActivity } from './activity'
 import { badRequest } from './errors'
 import { getTokens, spotifyError, spotifyFetch } from './spotify'
 import type { AppEnv } from './types'
@@ -59,8 +60,10 @@ playerRoutes.post('/play', async (c) => {
   const devices = await listDevices(c.env, accessToken)
   const target = pickDevice(devices, { deviceId, clientKind: parseClientKind(body.clientKind) })
   if (!target || !(await startAlbum(c.env, accessToken, albumId, target.id))) {
+    await recordActivity(c.env.DB, 'lecture.sans_appareil', { albumId, appareils: devices.map((d) => d.name) })
     return c.json<PlayResult>({ status: 'no_device' })
   }
+  await recordActivity(c.env.DB, 'lecture', { albumId, appareil: target.name })
   return c.json<PlayResult>({ status: 'playing', device: target })
 })
 
@@ -85,10 +88,15 @@ playerRoutes.post('/play/when-ready', async (c) => {
         const usable = devices.filter((d) => !d.isRestricted)
         const phone = usable.find((d) => d.type === 'Smartphone') ?? usable.find((d) => !known.has(d.id))
         if (phone) {
-          await startAlbum(c.env, accessToken, albumId, phone.id).catch((err) => console.error('Lecture différée', err))
+          const started = await startAlbum(c.env, accessToken, albumId, phone.id).catch((err) => {
+            console.error('Lecture différée', err)
+            return false
+          })
+          await recordActivity(c.env.DB, 'lecture.differee', { albumId, appareil: phone.name, lance: started })
           return
         }
       }
+      await recordActivity(c.env.DB, 'lecture.differee_abandonnee', { albumId, attente: WAIT_WINDOW_MS })
     })(),
   )
   return c.json({ status: 'waiting' })

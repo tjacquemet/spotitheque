@@ -44,13 +44,15 @@ export interface LibraryPayload {
   links: LinkRow[]
 }
 
-/** Fiche MusicBrainz d'un album, cherchée par le navigateur puis enregistrée par le Worker. */
+/** Fiche d'un album dans une base musicale libre, cherchée par le navigateur puis enregistrée par le Worker. */
 export interface MusicBrainzRecord {
   albumId: string
   mbid: string | null
   title: string | null
   artist: string | null
   year: number | null
+  /** Genres tels que la base les décrit : ils guident les propositions de tags. */
+  genres: string[]
   status: 'found' | 'missing'
 }
 

@@ -1,4 +1,5 @@
 import { Hono } from 'hono'
+import { activityRoutes } from './activity'
 import { authRoutes, requireSession } from './auth'
 import { backupRoutes } from './backup'
 import { handleScheduled } from './cron'
@@ -34,6 +35,7 @@ app.route('/', libraryRoutes)
 app.route('/', backupRoutes)
 app.route('/', playerRoutes)
 app.route('/', suggestRoutes)
+app.route('/', activityRoutes)
 
 export default {
   fetch: app.fetch,

@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import type { MusicBrainzRecord, SuggestionRow } from '../shared/api'
 import { TAG_COLORS, normalizeTagName } from '../shared/tags'
+import { activityStmt, recordActivity } from './activity'
 import { bumpVersionStmt, nowIso, versionFrom } from './db'
 import { ApiError, badRequest } from './errors'
 import type { AppEnv } from './types'
@@ -10,6 +11,12 @@ export const suggestRoutes = new Hono<AppEnv>()
 
 /** Albums dont la fiche MusicBrainz est demandée au navigateur à chaque passe. */
 const ENRICH_PER_RUN = 24
+/**
+ * Version de la recherche dans les bases musicales. À incrémenter dès qu'elle s'améliore :
+ * les fiches plus anciennes sont alors refaites, sans intervention sur la base.
+ * 2 : insistance auprès de MusicBrainz après un refus, et récupération des genres.
+ */
+const LOOKUP_VERSION = 2
 /** Albums analysés par appel d'IA. */
 const ANALYZE_PER_RUN = 12
 const MODEL = '@cf/openai/gpt-oss-120b'
@@ -170,6 +177,7 @@ SELECT count(*) AS n FROM json_each(?1) sel
 JOIN albums a ON a.id = sel.value
 LEFT JOIN album_musicbrainz mb ON mb.album_id = a.id
 WHERE mb.album_id IS NULL
+   OR mb.lookup_version < ?2
    OR (mb.status = 'found' AND NOT EXISTS (SELECT 1 FROM suggestions s WHERE s.album_id = a.id AND s.source = 'ai'))`
 
 /** Albums dont la fiche MusicBrainz manque : le navigateur ira les chercher lui-même. */
@@ -184,10 +192,10 @@ suggestRoutes.post('/suggestions/plan', async (c) => {
         `SELECT a.id, a.name, a.artists FROM json_each(?1) sel
          JOIN albums a ON a.id = sel.value
          LEFT JOIN album_musicbrainz mb ON mb.album_id = a.id
-         WHERE mb.album_id IS NULL LIMIT ?2`,
+         WHERE mb.album_id IS NULL OR mb.lookup_version < ?2 LIMIT ?3`,
       )
-      .bind(selection, ENRICH_PER_RUN),
-    db.prepare(REMAINING_SQL).bind(selection),
+      .bind(selection, LOOKUP_VERSION, ENRICH_PER_RUN),
+    db.prepare(REMAINING_SQL).bind(selection, LOOKUP_VERSION),
   ])
   return c.json({
     toEnrich: missing.results.map((row) => ({
@@ -210,23 +218,33 @@ suggestRoutes.post('/suggestions/musicbrainz', async (c) => {
       title: text(o.title, 500),
       artist: text(o.artist, 500),
       year: typeof o.year === 'number' && Number.isInteger(o.year) ? o.year : null,
+      genres: Array.isArray(o.genres) ? o.genres.filter((g): g is string => typeof g === 'string' && g.length <= 40).slice(0, 8) : [],
       status: o.status === 'found' ? 'found' : 'missing',
     }
   })
   if (records.length === 0) return c.json({ saved: 0 })
   const db = c.env.DB
-  await db
-    .prepare(
-      `INSERT INTO album_musicbrainz (album_id, mbid, title, artist, year, genres, status, fetched_at)
-       SELECT json_extract(value, '$.albumId'), json_extract(value, '$.mbid'), json_extract(value, '$.title'),
-              json_extract(value, '$.artist'), json_extract(value, '$.year'), '[]',
-              json_extract(value, '$.status'), ?2
-       FROM json_each(?1) WHERE true
-       ON CONFLICT(album_id) DO UPDATE SET mbid = excluded.mbid, title = excluded.title, artist = excluded.artist,
-         year = excluded.year, status = excluded.status, fetched_at = excluded.fetched_at`,
-    )
-    .bind(JSON.stringify(records), nowIso())
-    .run()
+  const payload = JSON.stringify(records)
+  await db.batch([
+    db
+      .prepare(
+        `INSERT INTO album_musicbrainz (album_id, mbid, title, artist, year, genres, status, fetched_at, lookup_version)
+         SELECT json_extract(value, '$.albumId'), json_extract(value, '$.mbid'), json_extract(value, '$.title'),
+                json_extract(value, '$.artist'), json_extract(value, '$.year'), json_extract(value, '$.genres'),
+                json_extract(value, '$.status'), ?2, ?3
+         FROM json_each(?1) WHERE true
+         ON CONFLICT(album_id) DO UPDATE SET mbid = excluded.mbid, title = excluded.title, artist = excluded.artist,
+           year = excluded.year, genres = excluded.genres, status = excluded.status, fetched_at = excluded.fetched_at,
+           lookup_version = excluded.lookup_version`,
+      )
+      .bind(payload, nowIso(), LOOKUP_VERSION),
+    // Une fiche fraîche annule la marque « déjà analysé, rien trouvé » : l'album repasse devant le modèle.
+    db
+      .prepare(
+        `DELETE FROM suggestions WHERE label = '' AND album_id IN (SELECT json_extract(value, '$.albumId') FROM json_each(?1))`,
+      )
+      .bind(payload),
+  ])
   return c.json({ saved: records.length })
 })
 
@@ -265,7 +283,13 @@ suggestRoutes.post('/suggestions/run', async (c) => {
       max_tokens: 900,
     })
     const parsed = parseModelAnswer(extractText(answer))
-    if (parsed.length === 0) console.log('Réponse du modèle non exploitable :', JSON.stringify(answer).slice(0, 800))
+    if (parsed.length === 0) {
+      // Journalisé tel quel : c'est la seule trace exploitable quand le modèle répond hors format.
+      await recordActivity(db, 'suggest.reponse_illisible', {
+        albums: toAnalyze.map((a) => a.title),
+        reponse: extractText(answer).slice(0, 600) || JSON.stringify(answer).slice(0, 600),
+      })
+    }
     suggested = await saveSuggestions(db, toAnalyze, parsed)
     // Les albums sans réponse exploitable ne doivent pas être analysés en boucle.
     await db
@@ -277,8 +301,15 @@ suggestRoutes.post('/suggestions/run', async (c) => {
       .run()
   }
 
-  const remaining = await db.prepare(REMAINING_SQL).bind(selection).first<{ n: number }>()
+  const remaining = await db.prepare(REMAINING_SQL).bind(selection, LOOKUP_VERSION).first<{ n: number }>()
   const version = suggested > 0 ? versionFrom([await bumpVersionStmt(db).run()]) : null
+  await recordActivity(db, 'suggest.passe', {
+    selection: albumIds.length,
+    analyses: toAnalyze.length,
+    propositions: suggested,
+    restants: remaining?.n ?? 0,
+    sansGenres: toAnalyze.filter((a) => !a.genres || a.genres === '[]').length,
+  })
   return c.json({ analyzed: toAnalyze.length, suggested, remaining: remaining?.n ?? 0, version })
 })
 
@@ -319,6 +350,7 @@ suggestRoutes.post('/suggestions/accept', async (c) => {
     db.prepare('INSERT OR IGNORE INTO album_tags (album_id, tag_id) VALUES (?, ?)').bind(albumId, tagId),
     db.prepare('DELETE FROM suggestions WHERE album_id = ? AND label_key = ?').bind(albumId, key),
     db.prepare('SELECT id, name, color, is_genre AS isGenre FROM tags WHERE id = ?').bind(tagId),
+    activityStmt(db, 'suggest.acceptee', { albumId, tag: name, nouveau: !existing }),
     bumpVersionStmt(db),
   ])
   const row = results[2].results[0] as { id: number; name: string; color: string; isGenre: number }
@@ -330,11 +362,12 @@ suggestRoutes.post('/suggestions/reject', async (c) => {
   const body = asObject(await c.req.json())
   const albumId = parseSpotifyId(body.albumId)
   const db = c.env.DB
-  if (typeof body.label === 'string' && body.label.length > 0) {
-    const { key } = normalizeTagName(body.label)
-    await db.prepare("UPDATE suggestions SET status = 'rejected' WHERE album_id = ? AND label_key = ?").bind(albumId, key).run()
-  } else {
-    await db.prepare("UPDATE suggestions SET status = 'rejected' WHERE album_id = ?").bind(albumId).run()
-  }
+  const label = typeof body.label === 'string' && body.label.length > 0 ? body.label : null
+  const update = label
+    ? db
+        .prepare("UPDATE suggestions SET status = 'rejected' WHERE album_id = ? AND label_key = ?")
+        .bind(albumId, normalizeTagName(label).key)
+    : db.prepare("UPDATE suggestions SET status = 'rejected' WHERE album_id = ?").bind(albumId)
+  await db.batch([update, activityStmt(db, 'suggest.refusee', { albumId, tag: label })])
   return c.json({ ok: true })
 })

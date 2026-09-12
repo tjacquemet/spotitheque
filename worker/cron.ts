@@ -1,5 +1,6 @@
 import type { SavedAlbumsPage } from '../shared/spotify'
 import { toSyncAlbum } from '../shared/spotify'
+import { activityStmt, recordActivity, trimActivityStmt } from './activity'
 import { bumpVersionStmt, nowIso, setSettingStmt } from './db'
 import { UPSERT_ALBUMS } from './library'
 import { collectRecentPlays } from './plays'
@@ -36,16 +37,25 @@ export async function syncNewAlbums(env: Env): Promise<{ changes: number }> {
 
 /** Tâches planifiées : relevé des écoutes toutes les 30 minutes, albums une fois par jour. */
 export async function handleScheduled(event: ScheduledController, env: Env): Promise<void> {
+  let plays = 0
   try {
-    await collectRecentPlays(env)
+    plays = (await collectRecentPlays(env)).updated
   } catch (err) {
     console.error('Relevé des écoutes', err)
   }
-  if (event.cron !== '*/30 * * * *') {
-    try {
-      await syncNewAlbums(env)
-    } catch (err) {
-      console.error('Synchro quotidienne', err)
-    }
+  if (event.cron === '*/30 * * * *') {
+    // Seules les relèves qui ont vu passer une écoute méritent une ligne : le reste serait du bruit.
+    if (plays > 0) await recordActivity(env.DB, 'ecoutes.relevees', { albums: plays })
+    return
   }
+  let changes = 0
+  try {
+    changes = (await syncNewAlbums(env)).changes
+  } catch (err) {
+    console.error('Synchro quotidienne', err)
+  }
+  await env.DB.batch([
+    activityStmt(env.DB, 'cron.quotidien', { ecoutes: plays, albumsAjoutes: changes }),
+    trimActivityStmt(env.DB),
+  ])
 }

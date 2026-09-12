@@ -3,6 +3,7 @@ import type { AlbumRow, LibraryPayload, SyncAlbum } from '../shared/api'
 import { normalizeTagName, tagSortKey } from '../shared/tags'
 import { api } from './api'
 import { idbDelete, idbGet, idbSet } from './lib/idb'
+import { logAction } from './lib/activity'
 import { lookupAlbums } from './lib/lookup'
 import { SAVED_ALBUMS_URL, SpotifyTokenRejected, fetchSavedAlbumsPage, isUnchanged, toSyncAlbum } from './lib/spotify'
 import { compareText, normalize } from './lib/text'
@@ -357,6 +358,7 @@ export async function runSuggestions(albumIds: string[]): Promise<{ suggested: n
   if (suggesting || albumIds.length === 0) return null
   suggesting = true
   setState({ suggestRun: { done: 0, total: albumIds.length } })
+  logAction('analyse.lancee', { albums: albumIds.length })
   let suggested = 0
   let unavailable = false
   try {
@@ -382,6 +384,7 @@ export async function runSuggestions(albumIds: string[]): Promise<{ suggested: n
     }
     await loadSuggestions()
     await refreshLibrary()
+    logAction('analyse.terminee', { albums: albumIds.length, propositions: suggested, basesIndisponibles: unavailable })
     return { suggested, unavailable }
   } finally {
     suggesting = false
@@ -445,7 +448,9 @@ export async function runSync(full: boolean): Promise<{ added: number; removed: 
       removed = (await api.syncFinish(allIds)).removed
     }
     await refreshLibrary()
-    return { added: changed.filter((a) => !known.get(a.id)?.inLibrary).length, removed }
+    const added = changed.filter((a) => !known.get(a.id)?.inLibrary).length
+    logAction('sync', { complete: full, lus: allIds.length, modifies: changed.length, ajoutes: added, retires: removed })
+    return { added, removed }
   } finally {
     syncing = false
     setState({ sync: null })

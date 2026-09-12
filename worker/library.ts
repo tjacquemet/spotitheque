@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import type { MeResponse, MutationResult, TagDto } from '../shared/api'
 import { TAG_COLORS } from '../shared/tags'
+import { activityStmt, recordActivity } from './activity'
 import { bumpVersionStmt, getSetting, nowIso, setSettingStmt, versionFrom } from './db'
 import { ApiError, badRequest } from './errors'
 import { collectRecentPlays } from './plays'
@@ -87,7 +88,8 @@ libraryRoutes.post('/sync/albums', async (c) => {
 /** Fin d'une synchronisation complète : les albums absents de Spotify sont marqués comme retirés. */
 libraryRoutes.post('/sync/finish', async (c) => {
   const body = asObject(await c.req.json())
-  const ids = JSON.stringify(parseList(body.allIds, 50_000, parseSpotifyId))
+  const allIds = parseList(body.allIds, 50_000, parseSpotifyId)
+  const ids = JSON.stringify(allIds)
   const db = c.env.DB
   const [total, missing] = await db.batch<{ n: number }>([
     db.prepare('SELECT count(*) AS n FROM albums WHERE in_library = 1'),
@@ -102,6 +104,7 @@ libraryRoutes.post('/sync/finish', async (c) => {
   const stmts = [
     db.prepare('UPDATE albums SET in_library = 0 WHERE in_library = 1 AND id NOT IN (SELECT value FROM json_each(?))').bind(ids),
     setSettingStmt(db, 'last_full_sync', nowIso()),
+    activityStmt(db, 'sync.terminee', { albumsSpotify: allIds.length, retires: removed }),
   ]
   if (removed > 0) stmts.push(bumpVersionStmt(db))
   const results = await db.batch(stmts)
@@ -126,7 +129,9 @@ libraryRoutes.post('/albums/delete', async (c) => {
     db.prepare('DELETE FROM albums WHERE in_library = 0 AND id IN (SELECT value FROM json_each(?))').bind(ids),
     bumpVersionStmt(db),
   ])
-  return c.json({ deleted: results[1].meta.changes ?? 0, version: versionFrom(results) })
+  const deleted = results[1].meta.changes ?? 0
+  await recordActivity(db, 'albums.supprimes', { demandes: albumIds.length, supprimes: deleted, albumIds: albumIds.slice(0, 20) })
+  return c.json({ deleted, version: versionFrom(results) })
 })
 
 /** Couleur la moins utilisée de la palette, pour varier les nouveaux tags. */
@@ -168,7 +173,9 @@ libraryRoutes.post('/tags', async (c) => {
     bumpVersionStmt(db),
   ])
   const tag = toTagDto(results[1].results[0] as TagRecord)
-  return c.json({ tag, created: (results[0].meta.changes ?? 0) > 0, version: versionFrom(results) })
+  const created = (results[0].meta.changes ?? 0) > 0
+  if (created) await recordActivity(db, 'tag.cree', { nom: name })
+  return c.json({ tag, created, version: versionFrom(results) })
 })
 
 libraryRoutes.patch('/tags/:id', async (c) => {
@@ -197,6 +204,7 @@ libraryRoutes.patch('/tags/:id', async (c) => {
     const results = await db.batch([
       db.prepare(`UPDATE tags SET ${sets.join(', ')} WHERE id = ?`).bind(...binds, id),
       db.prepare(`SELECT ${TAG_FIELDS} FROM tags WHERE id = ?`).bind(id),
+      activityStmt(db, 'tag.modifie', { id, nom: body.name, couleur: body.color, genre: body.isGenre }),
       bumpVersionStmt(db),
     ])
     return c.json({ tag: toTagDto(results[1].results[0] as TagRecord), version: versionFrom(results) })
@@ -209,10 +217,11 @@ libraryRoutes.patch('/tags/:id', async (c) => {
 libraryRoutes.delete('/tags/:id', async (c) => {
   const id = parseTagId(c.req.param('id'))
   const db = c.env.DB
-  await requireTag(db, id)
+  const tag = await requireTag(db, id)
   const results = await db.batch([
     db.prepare('DELETE FROM album_tags WHERE tag_id = ?').bind(id),
     db.prepare('DELETE FROM tags WHERE id = ?').bind(id),
+    activityStmt(db, 'tag.supprime', { id, nom: tag.name }),
     bumpVersionStmt(db),
   ])
   return c.json<MutationResult>({ version: versionFrom(results) })
@@ -224,14 +233,15 @@ libraryRoutes.post('/tags/:id/merge', async (c) => {
   const into = parseTagId(asObject(await c.req.json()).into)
   if (id === into) throw badRequest('Impossible de fusionner un tag avec lui-même.')
   const db = c.env.DB
-  await requireTag(db, id)
-  await requireTag(db, into)
+  const source = await requireTag(db, id)
+  const target = await requireTag(db, into)
   const results = await db.batch([
     db.prepare(
       'INSERT OR IGNORE INTO album_tags (album_id, tag_id, created_at) SELECT album_id, ?2, created_at FROM album_tags WHERE tag_id = ?1',
     ).bind(id, into),
     db.prepare('DELETE FROM album_tags WHERE tag_id = ?').bind(id),
     db.prepare('DELETE FROM tags WHERE id = ?').bind(id),
+    activityStmt(db, 'tag.fusionne', { de: source.name, vers: target.name }),
     bumpVersionStmt(db),
   ])
   return c.json<MutationResult>({ version: versionFrom(results) })
@@ -265,7 +275,10 @@ libraryRoutes.post('/album-tags', async (c) => {
       ).bind(ids, JSON.stringify(remove)),
     )
   }
-  stmts.push(bumpVersionStmt(db))
+  stmts.push(
+    activityStmt(db, 'albums.tags', { albums: albumIds.length, albumIds: albumIds.slice(0, 20), ajoutes: add, retires: remove }),
+    bumpVersionStmt(db),
+  )
   const results = await db.batch(stmts)
   return c.json<MutationResult>({ version: versionFrom(results) })
 })
