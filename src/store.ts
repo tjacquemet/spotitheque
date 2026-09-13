@@ -141,7 +141,13 @@ function toPayload(d: LibraryData): LibraryPayload {
 
 // --- Cache local ---
 
-const CACHE_KEY = 'library'
+/**
+ * Le nom porte le format des données enregistrées. L'augmenter met au rebut les caches d'un format
+ * antérieur : sans cela, un cache d'une forme ancienne survit indéfiniment, puisque le serveur répond
+ * « inchangé » tant que le numéro de version des données correspond, quelle que soit la forme des lignes.
+ * 2 : les tags portent leur épinglage.
+ */
+const CACHE_KEY = 'library.2'
 let persistTimer: ReturnType<typeof setTimeout> | undefined
 
 function setData(data: LibraryData) {
@@ -171,6 +177,13 @@ export function refreshLibrary(): Promise<void> {
       await queue
       const payload = await api.library(state.data?.version)
       if (payload) setData(fromPayload(payload))
+      // La ligne brute dit tout : sans elle, impossible de distinguer un serveur muet d'un cache périmé.
+      logAction('bibliotheque', {
+        source: payload ? 'reseau' : 'inchangee',
+        version: payload?.version ?? state.data?.version ?? null,
+        tags: payload?.tags.length ?? null,
+        premier: payload?.tags[0] ?? null,
+      })
       setState({ loadError: null })
     } catch (err) {
       setState({ loadError: err instanceof Error ? err.message : String(err) })
@@ -184,7 +197,10 @@ export function refreshLibrary(): Promise<void> {
 export async function loadLibrary(): Promise<void> {
   if (!state.data) {
     const cached = await idbGet<LibraryPayload>(CACHE_KEY)
-    if (cached && !state.data) setState({ data: fromPayload(cached) })
+    if (cached && !state.data) {
+      setState({ data: fromPayload(cached) })
+      logAction('bibliotheque', { source: 'cache', version: cached.version, tags: cached.tags.length, premier: cached.tags[0] })
+    }
   }
   await refreshLibrary()
 }
