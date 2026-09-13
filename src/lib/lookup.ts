@@ -1,4 +1,4 @@
-import type { MusicBrainzRecord } from '../../shared/api'
+import type { LookupRecord } from '../../shared/api'
 import { logAction } from './activity'
 
 // Recherche des albums dans des bases musicales libres, depuis le navigateur : les adresses IP de
@@ -31,7 +31,7 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 const escapeLucene = (value: string) => value.replace(/[+\-&|!(){}[\]^"~*?:\\/]/g, ' ').replace(/\s+/g, ' ').trim()
 
-export const simplifyTitle = (s: string) =>
+const simplifyTitle = (s: string) =>
   s
     .normalize('NFD')
     .replace(/\p{Diacritic}/gu, '')
@@ -122,7 +122,7 @@ interface WikidataHit {
  * Wikidata : données libres (CC0), sans bridage. La recherche ne porte que sur le titre — elle ne compare
  * qu'aux libellés — et c'est la description (« 1959 studio album by Miles Davis ») qui confirme l'artiste.
  */
-async function wikidataLookup(artist: string, title: string): Promise<{ record: MusicBrainzRecord | null; blocked: boolean }> {
+async function wikidataLookup(artist: string, title: string): Promise<{ record: LookupRecord | null; blocked: boolean }> {
   const url = `${WD_API}?action=wbsearchentities&search=${encodeURIComponent(title)}&language=en&uselang=en&type=item&limit=20&format=json&origin=*`
   const res = await fetch(url).catch(() => null)
   if (!res) return { record: null, blocked: true }
@@ -151,8 +151,7 @@ async function wikidataLookup(artist: string, title: string): Promise<{ record: 
  */
 export async function lookupAlbums(
   albums: { id: string; name: string; artist: string }[],
-  onProgress?: (done: number) => void,
-): Promise<{ records: MusicBrainzRecord[]; unavailable: boolean }> {
+): Promise<{ records: LookupRecord[]; unavailable: boolean }> {
   const byArtist = new Map<string, typeof albums>()
   for (const album of albums) {
     const list = byArtist.get(album.artist) ?? []
@@ -161,10 +160,9 @@ export async function lookupAlbums(
   }
 
   const musicBrainz = new MusicBrainz()
-  const records: MusicBrainzRecord[] = []
+  const records: LookupRecord[] = []
   let viaWikidata = 0
   let wikidataBlocked = 0
-  let done = 0
 
   for (const [artist, list] of byArtist) {
     const cleanArtist = escapeLucene(artist)
@@ -202,8 +200,6 @@ export async function lookupAlbums(
             : { albumId: album.id, mbid: null, title: null, artist: null, year: null, genres: [], status: 'missing' },
         )
       }
-      done++
-      onProgress?.(done)
     }
   }
 

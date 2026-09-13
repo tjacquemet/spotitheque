@@ -104,7 +104,7 @@ function withTags(d: LibraryData, tags: Tag[]): LibraryData {
   return { ...d, tags: sorted, tagsById: new Map(sorted.map((t) => [t.id, t])) }
 }
 
-export function fromPayload(p: LibraryPayload): LibraryData {
+function fromPayload(p: LibraryPayload): LibraryData {
   const albums = p.albums.map(rowToAlbum)
   const links = new Map<string, Set<number>>()
   for (const [albumId, tagId] of p.links) {
@@ -177,13 +177,6 @@ export function refreshLibrary(): Promise<void> {
       await queue
       const payload = await api.library(state.data?.version)
       if (payload) setData(fromPayload(payload))
-      // La ligne brute dit tout : sans elle, impossible de distinguer un serveur muet d'un cache périmé.
-      logAction('bibliotheque', {
-        source: payload ? 'reseau' : 'inchangee',
-        version: payload?.version ?? state.data?.version ?? null,
-        tags: payload?.tags.length ?? null,
-        premier: payload?.tags[0] ?? null,
-      })
       setState({ loadError: null })
     } catch (err) {
       setState({ loadError: err instanceof Error ? err.message : String(err) })
@@ -197,10 +190,7 @@ export function refreshLibrary(): Promise<void> {
 export async function loadLibrary(): Promise<void> {
   if (!state.data) {
     const cached = await idbGet<LibraryPayload>(CACHE_KEY)
-    if (cached && !state.data) {
-      setState({ data: fromPayload(cached) })
-      logAction('bibliotheque', { source: 'cache', version: cached.version, tags: cached.tags.length, premier: cached.tags[0] })
-    }
+    if (cached && !state.data) setState({ data: fromPayload(cached) })
   }
   await refreshLibrary()
 }
@@ -390,7 +380,7 @@ export async function runSuggestions(albumIds: string[]): Promise<{ suggested: n
       setState({ suggestRun: { done: Math.max(0, albumIds.length - plan.remaining), total: albumIds.length } })
       if (plan.toEnrich.length > 0) {
         const lookup = await lookupAlbums(plan.toEnrich)
-        if (lookup.records.length > 0) await api.saveMusicBrainz(lookup.records)
+        if (lookup.records.length > 0) await api.saveLookup(lookup.records)
         if (lookup.unavailable && lookup.records.length === 0) {
           unavailable = true
           break

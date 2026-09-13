@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import type { MusicBrainzRecord, SuggestionRow } from '../shared/api'
+import type { LookupRecord, SuggestionRow } from '../shared/api'
 import { TAG_COLORS, normalizeTagName } from '../shared/tags'
 import { activityStmt, recordActivity } from './activity'
 import { bumpVersionStmt, nowIso, versionFrom } from './db'
@@ -9,7 +9,7 @@ import { asObject, parseList, parseSpotifyId } from './validate'
 
 export const suggestRoutes = new Hono<AppEnv>()
 
-/** Albums dont la fiche MusicBrainz est demandée au navigateur à chaque passe. */
+/** Albums dont la fiche est demandée au navigateur à chaque passe. */
 const ENRICH_PER_RUN = 24
 /**
  * Version de la recherche dans les bases musicales. À incrémenter dès qu'elle s'améliore :
@@ -187,12 +187,12 @@ WHERE NOT EXISTS (SELECT 1 FROM album_tags cur WHERE cur.album_id = a.id AND cur
 const REMAINING_SQL = `
 SELECT count(*) AS n FROM json_each(?1) sel
 JOIN albums a ON a.id = sel.value
-LEFT JOIN album_musicbrainz mb ON mb.album_id = a.id
+LEFT JOIN album_lookup mb ON mb.album_id = a.id
 WHERE mb.album_id IS NULL
    OR mb.lookup_version < ?2
    OR (mb.status = 'found' AND NOT EXISTS (SELECT 1 FROM suggestions s WHERE s.album_id = a.id AND s.source = 'ai'))`
 
-/** Albums dont la fiche MusicBrainz manque : le navigateur ira les chercher lui-même. */
+/** Albums sans fiche à jour : le navigateur ira les chercher lui-même dans les bases musicales. */
 suggestRoutes.post('/suggestions/plan', async (c) => {
   const albumIds = parseList(asObject(await c.req.json()).albumIds, 1000, parseSpotifyId)
   if (albumIds.length === 0) throw badRequest('Aucun album.')
@@ -203,7 +203,7 @@ suggestRoutes.post('/suggestions/plan', async (c) => {
       .prepare(
         `SELECT a.id, a.name, a.artists FROM json_each(?1) sel
          JOIN albums a ON a.id = sel.value
-         LEFT JOIN album_musicbrainz mb ON mb.album_id = a.id
+         LEFT JOIN album_lookup mb ON mb.album_id = a.id
          WHERE mb.album_id IS NULL OR mb.lookup_version < ?2 LIMIT ?3`,
       )
       .bind(selection, LOOKUP_VERSION, ENRICH_PER_RUN),
@@ -219,9 +219,9 @@ suggestRoutes.post('/suggestions/plan', async (c) => {
   })
 })
 
-/** Enregistre les fiches MusicBrainz trouvées par le navigateur. */
-suggestRoutes.post('/suggestions/musicbrainz', async (c) => {
-  const records = parseList(asObject(await c.req.json()).records, 200, (raw): MusicBrainzRecord => {
+/** Enregistre les fiches trouvées par le navigateur (MusicBrainz, ou Wikidata en second recours). */
+suggestRoutes.post('/suggestions/lookup', async (c) => {
+  const records = parseList(asObject(await c.req.json()).records, 200, (raw): LookupRecord => {
     const o = asObject(raw)
     const text = (v: unknown, max: number) => (typeof v === 'string' && v.length <= max ? v : null)
     return {
@@ -240,7 +240,7 @@ suggestRoutes.post('/suggestions/musicbrainz', async (c) => {
   await db.batch([
     db
       .prepare(
-        `INSERT INTO album_musicbrainz (album_id, mbid, title, artist, year, genres, status, fetched_at, lookup_version)
+        `INSERT INTO album_lookup (album_id, mbid, title, artist, year, genres, status, fetched_at, lookup_version)
          SELECT json_extract(value, '$.albumId'), json_extract(value, '$.mbid'), json_extract(value, '$.title'),
                 json_extract(value, '$.artist'), json_extract(value, '$.year'), json_extract(value, '$.genres'),
                 json_extract(value, '$.status'), ?2, ?3
@@ -276,7 +276,7 @@ suggestRoutes.post('/suggestions/run', async (c) => {
   const { results: toAnalyze } = await db
     .prepare(
       `SELECT mb.album_id AS id, mb.title, mb.artist, mb.year, mb.genres FROM json_each(?1) sel
-       JOIN album_musicbrainz mb ON mb.album_id = sel.value AND mb.status = 'found'
+       JOIN album_lookup mb ON mb.album_id = sel.value AND mb.status = 'found'
        WHERE NOT EXISTS (SELECT 1 FROM suggestions s WHERE s.album_id = mb.album_id AND s.source = 'ai')
        LIMIT ?2`,
     )

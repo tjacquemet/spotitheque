@@ -1,5 +1,4 @@
 import { bumpVersionStmt, getSetting, setSettingStmt } from './db'
-import { ApiError } from './errors'
 import { getTokens, spotifyError, spotifyFetch } from './spotify'
 
 const CURSOR_KEY = 'plays_cursor'
@@ -62,8 +61,4 @@ export async function collectRecentPlays(env: Env): Promise<{ updated: number; s
   if (updated > 0) stmts.push(bumpVersionStmt(env.DB))
   await env.DB.batch(stmts)
   return { updated, scopeMissing: false }
-}
-
-export function scopeError(): ApiError {
-  return new ApiError(403, 'spotify_scope', "Spotithèque a besoin d'une autorisation supplémentaire : reconnecte Spotify.")
 }

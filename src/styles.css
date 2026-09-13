@@ -462,7 +462,7 @@ a {
   border-bottom: 1px solid var(--border);
 }
 
-/* Intitulé du groupe « Genres » dans les listes de tags. */
+/* Intitulés des groupes de tags (épinglés, autres, genres) dans les listes. */
 .tag-group-label,
 .list-group-label,
 .chips-label {

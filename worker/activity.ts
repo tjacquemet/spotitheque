@@ -7,7 +7,7 @@ import { asObject, parseList } from './validate'
 export const activityRoutes = new Hono<AppEnv>()
 
 /** Nombre de lignes conservées : le journal sert au diagnostic récent, pas à l'archivage. */
-export const ACTIVITY_KEPT = 5000
+const ACTIVITY_KEPT = 5000
 const MAX_DETAIL = 2000
 
 const serialize = (detail: unknown) => (detail === undefined || detail === null ? null : JSON.stringify(detail).slice(0, MAX_DETAIL))

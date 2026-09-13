@@ -4,7 +4,7 @@ import { ApiError, SpotifyReauthError } from './errors'
 const ACCOUNTS_URL = 'https://accounts.spotify.com'
 const API_URL = 'https://api.spotify.com/v1'
 
-export const SPOTIFY_SCOPES = [
+const SPOTIFY_SCOPES = [
   'user-library-read',
   'user-read-playback-state',
   'user-modify-playback-state',

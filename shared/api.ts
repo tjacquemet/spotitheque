@@ -45,7 +45,7 @@ export interface LibraryPayload {
 }
 
 /** Fiche d'un album dans une base musicale libre, cherchée par le navigateur puis enregistrée par le Worker. */
-export interface MusicBrainzRecord {
+export interface LookupRecord {
   albumId: string
   mbid: string | null
   title: string | null

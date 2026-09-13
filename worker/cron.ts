@@ -15,7 +15,7 @@ const MAX_PAGES = 3
  * sans attendre que l'appli soit ouverte. Les albums retirés restent détectés par la
  * synchro complète du navigateur, trop lourde pour un Worker.
  */
-export async function syncNewAlbums(env: Env): Promise<{ changes: number }> {
+async function syncNewAlbums(env: Env): Promise<{ changes: number }> {
   const { accessToken } = await getTokens(env)
   let changes = 0
   for (let page = 0; page < MAX_PAGES; page++) {
