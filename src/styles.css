@@ -144,6 +144,7 @@ a {
   margin-left: 4px;
 }
 
+/* Bouton, mais dessiné comme un titre : il ramène à la bibliothèque complète. */
 .brand {
   display: flex;
   align-items: center;
@@ -151,6 +152,16 @@ a {
   font-size: 21px;
   font-weight: 750;
   letter-spacing: -0.02em;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.brand:active {
+  opacity: 0.6;
 }
 
 .brand svg {

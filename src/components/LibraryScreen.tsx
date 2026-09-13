@@ -125,6 +125,12 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
     if (value === 'random') setSeed(newSeed())
   }
 
+  /** Le titre ramène à la bibliothèque telle qu'elle s'ouvre : sans filtre ni recherche, en haut. */
+  const goHome = () => {
+    setFilters(EMPTY_FILTERS)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
   const tagState = (id: number): ChipState =>
     effective.include.includes(id) ? 'on' : effective.exclude.includes(id) ? 'excluded' : 'off'
 
@@ -334,10 +340,10 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
           ) : (
             /* Titre puis actions, groupés à gauche et à portée du pouce. */
             <>
-              <div className="brand">
+              <button type="button" className="brand" onClick={goHome} title="Revenir à la bibliothèque complète">
                 <DiscIcon size={22} className={sync ? 'spin' : undefined} />
                 Spotithèque
-              </div>
+              </button>
               <button type="button" className="icon-btn" onClick={() => setSelection(new Set())} aria-label="Sélectionner des albums">
                 <SelectIcon />
               </button>
