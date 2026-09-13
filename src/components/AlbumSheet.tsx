@@ -8,6 +8,7 @@ import { toast, toastError } from '../toast'
 import { AlbumCover } from './AlbumCover'
 import { DiceIcon, ExternalIcon, PlayIcon, SpeakerIcon, TrashIcon } from './Icons'
 import { Sheet } from './Sheet'
+import { TagChip } from './TagChip'
 import { TagPicker } from './TagPicker'
 import { TrackList } from './TrackList'
 
@@ -71,6 +72,9 @@ export function AlbumSheet({ album, spotify, onClose, onAnother }: AlbumSheetPro
   const data = useLibrary((s) => s.data)
   const playback = useAlbumPlayback(album.id, spotify)
   const albumTags = data?.links.get(album.id) ?? EMPTY
+  // Les tags posés d'un côté, ceux qui restent à poser de l'autre : la liste des tags est déjà classée.
+  const assigned = data?.tags.filter((t) => albumTags.has(t.id)) ?? []
+  const available = data?.tags.filter((t) => !albumTags.has(t.id)) ?? []
   const added = formatDate(album.addedAt)
   const played = formatDate(album.lastPlayedAt)
   const meta = [album.year, album.totalTracks ? plural(album.totalTracks, 'titre', 'titres') : null].filter(Boolean).join(' · ')
@@ -115,13 +119,21 @@ export function AlbumSheet({ album, spotify, onClose, onAnother }: AlbumSheetPro
       )}
 
       <h3 className="section-title">Tags</h3>
-      {data && (
-        <TagPicker
-          tags={data.tags}
-          stateOf={(tag) => (albumTags.has(tag.id) ? 'on' : 'off')}
-          onToggle={toggle}
-          onCreated={(tag) => applyTags([album.id], [tag.id], []).catch(toastError)}
-        />
+      {assigned.length > 0 ? (
+        <div className="chips-wrap">
+          {assigned.map((tag) => (
+            <TagChip
+              key={tag.id}
+              label={tag.name}
+              color={tag.color}
+              state="on"
+              onClick={() => toggle(tag)}
+              title={`Retirer « ${tag.name} »`}
+            />
+          ))}
+        </div>
+      ) : (
+        <p className="hint">Aucun tag sur cet album.</p>
       )}
 
       <h3 className="section-title">Titres</h3>
@@ -131,6 +143,17 @@ export function AlbumSheet({ album, spotify, onClose, onAnother }: AlbumSheetPro
         albumArtists={album.artistNames}
         onPlay={(position) => void playback.play(position)}
       />
+
+      <h3 className="section-title">Ajouter un tag</h3>
+      {data && (
+        <TagPicker
+          tags={available}
+          alreadyOn={assigned}
+          stateOf={() => 'off'}
+          onToggle={toggle}
+          onCreated={(tag) => applyTags([album.id], [tag.id], []).catch(toastError)}
+        />
+      )}
 
       {!album.inLibrary && (
         <button type="button" className="btn btn-danger btn-block danger-zone" onClick={remove}>

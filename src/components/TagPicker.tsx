@@ -9,6 +9,11 @@ import { TagChip, type ChipState } from './TagChip'
 
 interface TagPickerProps {
   tags: Tag[]
+  /**
+   * Tags déjà posés sur l'album : absents de la liste, mais reconnus à la saisie —
+   * sinon taper leur nom proposerait de créer un tag qui existe déjà.
+   */
+  alreadyOn?: Tag[]
   stateOf: (tag: Tag) => ChipState
   onToggle: (tag: Tag) => void
   /** Appelé avec le tag fraîchement créé, pour l'appliquer. */
@@ -16,14 +21,23 @@ interface TagPickerProps {
   placeholder?: string
 }
 
-/** Liste de tous les tags à (dé)cocher, avec recherche et création à la volée. */
-export function TagPicker({ tags, stateOf, onToggle, onCreated, placeholder = 'Chercher ou créer un tag…' }: TagPickerProps) {
+/** Liste de tags à (dé)cocher, avec recherche et création à la volée. */
+export function TagPicker({
+  tags,
+  alreadyOn = [],
+  stateOf,
+  onToggle,
+  onCreated,
+  placeholder = 'Chercher ou créer un tag…',
+}: TagPickerProps) {
   const [query, setQuery] = useState('')
   const [creating, setCreating] = useState(false)
   const { name, key } = normalizeTagName(query)
   const q = normalize(name)
   const visible = q ? tags.filter((t) => normalize(t.name).includes(q)) : tags
-  const exact = key ? tags.find((t) => t.name.toLocaleLowerCase('fr-FR') === key) : undefined
+  const sameKey = (t: Tag) => t.name.toLocaleLowerCase('fr-FR') === key
+  const exact = key ? tags.find(sameKey) : undefined
+  const already = key ? alreadyOn.find(sameKey) : undefined
 
   const create = async () => {
     if (!name || creating) return
@@ -41,7 +55,8 @@ export function TagPicker({ tags, stateOf, onToggle, onCreated, placeholder = 'C
   const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== 'Enter') return
     e.preventDefault()
-    if (exact) {
+    if (already) setQuery('')
+    else if (exact) {
       onToggle(exact)
       setQuery('')
     } else if (name) {
@@ -72,7 +87,8 @@ export function TagPicker({ tags, stateOf, onToggle, onCreated, placeholder = 'C
             </Fragment>
           )
         })}
-        {name && !exact && (
+        {already && <p className="hint">« {already.name} » est déjà sur cet album.</p>}
+        {name && !exact && !already && (
           <button type="button" className="chip create" onClick={create} disabled={creating}>
             + Créer « {name} »
           </button>
