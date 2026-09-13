@@ -11,6 +11,7 @@ import type {
   SuggestionRow,
   SyncAlbum,
   TagDto,
+  TrackRow,
 } from '../shared/api'
 
 export class ApiError extends Error {
@@ -105,12 +106,15 @@ export const api = {
   rejectSuggestion: (albumId: string, label?: string) =>
     request<{ ok: true }>('POST', '/suggestions/reject', { albumId, label }),
 
+  /** Titres de l'album, demandés à Spotify à l'ouverture d'une fiche. */
+  albumTracks: (albumId: string) => request<{ tracks: TrackRow[] }>('GET', `/albums/${albumId}/tracks`),
+
   devices: () => request<{ devices: Device[] }>('GET', '/devices'),
-  play: (albumId: string, deviceId: string | null, clientKind: ClientKind) =>
-    request<PlayResult>('POST', '/play', { albumId, deviceId, clientKind }),
+  play: (albumId: string, deviceId: string | null, clientKind: ClientKind, trackPosition = 0) =>
+    request<PlayResult>('POST', '/play', { albumId, deviceId, clientKind, trackPosition }),
   /** Envoyé juste avant d'ouvrir Spotify : keepalive garantit l'envoi même si la page passe en arrière-plan. */
-  playWhenReady: (albumId: string) =>
-    request<{ status: 'waiting' }>('POST', '/play/when-ready', { albumId }, { keepalive: true }),
+  playWhenReady: (albumId: string, trackPosition = 0) =>
+    request<{ status: 'waiting' }>('POST', '/play/when-ready', { albumId, trackPosition }, { keepalive: true }),
 
   importTags: (file: unknown) => request<{ tags: number; albums: number; links: number; version: number }>('POST', '/import', file),
   logout: () => request<{ ok: true }>('POST', '/auth/logout', {}),

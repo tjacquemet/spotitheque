@@ -35,6 +35,13 @@ export type AlbumRow = [
   lastPlayedAt: string | null,
 ]
 export type TagRow = [id: number, name: string, color: string, isGenre: 0 | 1, isPinned: 0 | 1]
+
+/**
+ * Piste d'un album : [numéro, disque, titre, durée en ms, artistes].
+ * Lue chez Spotify à l'ouverture d'une fiche et jamais conservée — les tags portent sur les albums,
+ * et une réédition change la liste.
+ */
+export type TrackRow = [n: number, disc: number, name: string, durationMs: number, artists: string]
 export type LinkRow = [albumId: string, tagId: number]
 
 export interface LibraryPayload {

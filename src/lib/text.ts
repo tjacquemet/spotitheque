@@ -16,3 +16,13 @@ export function formatDate(iso: string | null): string | null {
 export function plural(n: number, one: string, many: string): string {
   return `${n.toLocaleString('fr-FR')} ${n > 1 ? many : one}`
 }
+
+/** Durée d'un morceau : 3:07, et 1:02:30 au-delà d'une heure. */
+export function formatDuration(ms: number): string {
+  const total = Math.round(ms / 1000)
+  const minutes = Math.floor(total / 60) % 60
+  const seconds = total % 60
+  const hours = Math.floor(total / 3600)
+  const mm = hours > 0 ? String(minutes).padStart(2, '0') : String(minutes)
+  return `${hours > 0 ? `${hours}:` : ''}${mm}:${String(seconds).padStart(2, '0')}`
+}

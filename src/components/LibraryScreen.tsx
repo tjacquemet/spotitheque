@@ -421,6 +421,7 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
 
       {openAlbum && (
         <AlbumSheet
+          key={openAlbum.id}
           album={openAlbum}
           spotify={spotify}
           onClose={() => setOpen(null)}

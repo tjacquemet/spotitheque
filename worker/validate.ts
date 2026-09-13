@@ -9,6 +9,13 @@ export function parseSpotifyId(v: unknown): string {
   return v
 }
 
+/** Rang de la piste à laquelle démarrer l'album ; absent, la lecture commence au début. */
+export function parseTrackPosition(v: unknown): number {
+  if (v === undefined || v === null) return 0
+  if (typeof v !== 'number' || !Number.isInteger(v) || v < 0 || v > 500) throw badRequest('Piste invalide.')
+  return v
+}
+
 export function parseTagId(v: unknown): number {
   const n = typeof v === 'string' ? Number(v) : v
   if (typeof n !== 'number' || !Number.isInteger(n) || n <= 0) throw badRequest('Identifiant de tag invalide.')

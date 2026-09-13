@@ -5,7 +5,7 @@ import { recordActivity } from './activity'
 import { badRequest } from './errors'
 import { getTokens, spotifyError, spotifyFetch } from './spotify'
 import type { AppEnv } from './types'
-import { asObject, parseSpotifyId } from './validate'
+import { asObject, parseSpotifyId, parseTrackPosition } from './validate'
 
 interface SpotifyDevice {
   id: string | null
@@ -26,13 +26,13 @@ async function listDevices(env: Env, token: string): Promise<Device[]> {
     .map((d) => ({ id: d.id, name: d.name, type: d.type, isActive: d.is_active, isRestricted: d.is_restricted }))
 }
 
-/** Lance l'album depuis la première piste puis coupe l'aléatoire. Renvoie false si l'appareil a disparu. */
-async function startAlbum(env: Env, token: string, albumId: string, deviceId: string): Promise<boolean> {
+/** Lance l'album à la piste demandée puis coupe l'aléatoire. Renvoie false si l'appareil a disparu. */
+async function startAlbum(env: Env, token: string, albumId: string, deviceId: string, position = 0): Promise<boolean> {
   const device = encodeURIComponent(deviceId)
   const res = await spotifyFetch(
     env,
     `/me/player/play?device_id=${device}`,
-    { method: 'PUT', body: { context_uri: `spotify:album:${albumId}`, offset: { position: 0 }, position_ms: 0 } },
+    { method: 'PUT', body: { context_uri: `spotify:album:${albumId}`, offset: { position }, position_ms: 0 } },
     token,
   )
   if (res.status === 404) return false
@@ -58,12 +58,13 @@ playerRoutes.post('/play', async (c) => {
   if (deviceId !== null && (deviceId.length === 0 || deviceId.length > 100)) throw badRequest('Appareil invalide.')
   const { accessToken } = await getTokens(c.env)
   const devices = await listDevices(c.env, accessToken)
+  const position = parseTrackPosition(body.trackPosition)
   const target = pickDevice(devices, { deviceId, clientKind: parseClientKind(body.clientKind) })
-  if (!target || !(await startAlbum(c.env, accessToken, albumId, target.id))) {
+  if (!target || !(await startAlbum(c.env, accessToken, albumId, target.id, position))) {
     await recordActivity(c.env.DB, 'lecture.sans_appareil', { albumId, appareils: devices.map((d) => d.name) })
     return c.json<PlayResult>({ status: 'no_device' })
   }
-  await recordActivity(c.env.DB, 'lecture', { albumId, appareil: target.name })
+  await recordActivity(c.env.DB, 'lecture', { albumId, appareil: target.name, piste: position + 1 })
   return c.json<PlayResult>({ status: 'playing', device: target })
 })
 
@@ -76,7 +77,9 @@ const POLL_MS = 1_500
  * et on lance la lecture dès que le téléphone se connecte.
  */
 playerRoutes.post('/play/when-ready', async (c) => {
-  const albumId = parseSpotifyId(asObject(await c.req.json()).albumId)
+  const body = asObject(await c.req.json())
+  const albumId = parseSpotifyId(body.albumId)
+  const position = parseTrackPosition(body.trackPosition)
   const { accessToken } = await getTokens(c.env)
   const known = new Set((await listDevices(c.env, accessToken).catch(() => [])).map((d) => d.id))
   c.executionCtx.waitUntil(
@@ -88,7 +91,7 @@ playerRoutes.post('/play/when-ready', async (c) => {
         const usable = devices.filter((d) => !d.isRestricted)
         const phone = usable.find((d) => d.type === 'Smartphone') ?? usable.find((d) => !known.has(d.id))
         if (phone) {
-          const started = await startAlbum(c.env, accessToken, albumId, phone.id).catch((err) => {
+          const started = await startAlbum(c.env, accessToken, albumId, phone.id, position).catch((err) => {
             console.error('Lecture différée', err)
             return false
           })

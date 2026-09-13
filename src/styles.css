@@ -1248,6 +1248,100 @@ a {
   box-shadow: inset 0 0 0 3px var(--bg);
 }
 
+/* --- Titres de l'album --- */
+
+.track-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.track {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 8px;
+  border: 0;
+  border-radius: 10px;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.track:hover,
+.track:focus-visible {
+  background: var(--surface-2);
+}
+
+.track:active {
+  opacity: 0.6;
+}
+
+.track-mark {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 22px;
+}
+
+.track-mark > * {
+  grid-area: 1 / 1;
+}
+
+.track-n {
+  color: var(--text-3);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.track-play {
+  color: var(--accent);
+  opacity: 0;
+}
+
+.track:hover .track-n,
+.track:focus-visible .track-n {
+  opacity: 0;
+}
+
+.track:hover .track-play,
+.track:focus-visible .track-play {
+  opacity: 1;
+}
+
+.track-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.track-artists {
+  display: block;
+  color: var(--text-3);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.track-time {
+  flex: none;
+  color: var(--text-3);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.track-disc {
+  margin: 14px 0 2px;
+  padding: 0 8px;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .danger-zone {
   margin-top: 28px;
 }
