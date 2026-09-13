@@ -34,7 +34,7 @@ export type AlbumRow = [
   inLibrary: 0 | 1,
   lastPlayedAt: string | null,
 ]
-export type TagRow = [id: number, name: string, color: string, isGenre: 0 | 1]
+export type TagRow = [id: number, name: string, color: string, isGenre: 0 | 1, isPinned: 0 | 1]
 export type LinkRow = [albumId: string, tagId: number]
 
 export interface LibraryPayload {
@@ -86,6 +86,8 @@ export interface TagDto {
   color: string
   /** Tag de genre musical : classé en fin de liste, après les autres. */
   isGenre: boolean
+  /** Tag épinglé : classé en tête de liste, avant tous les autres. */
+  isPinned: boolean
 }
 
 /** Réponse des routes qui modifient les données : nouvelle version de la bibliothèque. */
@@ -114,6 +116,6 @@ export interface ExportFile {
   app: 'spotitheque'
   format: 1
   exportedAt: string
-  tags: { name: string; color: string; isGenre?: boolean }[]
+  tags: { name: string; color: string; isGenre?: boolean; isPinned?: boolean }[]
   albums: (Omit<SyncAlbum, 'upc'> & { tags: string[] })[]
 }

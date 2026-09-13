@@ -1,4 +1,5 @@
 import { Fragment, type CSSProperties } from 'react'
+import { tagGroupLabel } from '../lib/groups'
 import type { Tag } from '../lib/types'
 import { BanIcon } from './Icons'
 
@@ -13,19 +14,18 @@ interface TagFilterListProps {
 
 /** Liste verticale des tags : un par ligne, avec son nombre d'albums et un bouton pour l'exclure. */
 export function TagFilterList({ tags, counts, include, exclude, onToggle, onToggleExclude }: TagFilterListProps) {
-  // Les tags sont déjà classés genres en dernier : on insère l'intitulé avant le premier d'entre eux.
-  const firstGenre = tags.findIndex((t) => t.isGenre)
-
   return (
     <ul className="tag-list">
       {tags.map((tag, index) => {
         const state = include.includes(tag.id) ? 'on' : exclude.includes(tag.id) ? 'excluded' : 'off'
         const count = counts.get(tag.id) ?? 0
+        // Les tags sont déjà classés par groupe : l'intitulé s'insère avant le premier de chacun.
+        const group = tagGroupLabel(tags, index)
         return (
           <Fragment key={tag.id}>
-            {index === firstGenre && (
+            {group && (
               <li className="tag-group-label" aria-hidden="true">
-                Genres
+                {group}
               </li>
             )}
           <li

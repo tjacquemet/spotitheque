@@ -1,6 +1,7 @@
 import { Fragment, useMemo, useState, type FormEvent } from 'react'
 import { TAG_COLORS, TAG_NAME_MAX, normalizeTagName } from '../../shared/tags'
 import { countTags } from '../lib/filter'
+import { tagGroupLabel } from '../lib/groups'
 import { plural } from '../lib/text'
 import type { Tag } from '../lib/types'
 import { createTag, deleteTag, mergeTag, updateTag, useLibrary } from '../store'
@@ -49,6 +50,18 @@ function TagEditSheet({ tag, count, tags, onClose }: { tag: Tag; count: number; 
           Renommer
         </button>
       </form>
+
+      <label className="check-row">
+        <input
+          type="checkbox"
+          checked={tag.isPinned}
+          onChange={(e) => updateTag(tag.id, { isPinned: e.target.checked }).catch(toastError)}
+        />
+        <span>
+          Épingler en haut
+          <em>Les tags épinglés sont regroupés au début des listes de tags.</em>
+        </span>
+      </label>
 
       <label className="check-row">
         <input
@@ -112,7 +125,6 @@ export function TagsScreen({ onBack }: { onBack: () => void }) {
     [data],
   )
   const tags = data?.tags ?? []
-  const firstGenre = tags.findIndex((t) => t.isGenre)
   const editedTag = editing !== null ? data?.tagsById.get(editing) : undefined
 
   const create = (e: FormEvent) => {
@@ -154,9 +166,11 @@ export function TagsScreen({ onBack }: { onBack: () => void }) {
           <p className="empty">Aucun tag. Crée-en un ici ou depuis la fiche d'un album.</p>
         ) : (
           <ul className="list">
-            {tags.map((tag, index) => (
+            {tags.map((tag, index) => {
+              const group = tagGroupLabel(tags, index)
+              return (
               <Fragment key={tag.id}>
-                {index === firstGenre && <li className="list-group-label">Genres</li>}
+                {group && <li className="list-group-label">{group}</li>}
                 <li>
                   <button type="button" className="row" onClick={() => setEditing(tag.id)}>
                     <span className="row-dot" style={{ background: tag.color }} />
@@ -166,7 +180,8 @@ export function TagsScreen({ onBack }: { onBack: () => void }) {
                   </button>
                 </li>
               </Fragment>
-            ))}
+              )
+            })}
           </ul>
         )}
       </main>

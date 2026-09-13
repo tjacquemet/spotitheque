@@ -368,12 +368,15 @@ suggestRoutes.post('/suggestions/accept', async (c) => {
   const results = await db.batch([
     db.prepare('INSERT OR IGNORE INTO album_tags (album_id, tag_id) VALUES (?, ?)').bind(albumId, tagId),
     db.prepare('DELETE FROM suggestions WHERE album_id = ? AND label_key = ?').bind(albumId, key),
-    db.prepare('SELECT id, name, color, is_genre AS isGenre FROM tags WHERE id = ?').bind(tagId),
+    db.prepare('SELECT id, name, color, is_genre AS isGenre, is_pinned AS isPinned FROM tags WHERE id = ?').bind(tagId),
     activityStmt(db, 'suggest.acceptee', { albumId, tag: name, nouveau: !existing }),
     bumpVersionStmt(db),
   ])
-  const row = results[2].results[0] as { id: number; name: string; color: string; isGenre: number }
-  return c.json({ tag: { ...row, isGenre: row.isGenre === 1 }, version: versionFrom(results) })
+  const row = results[2].results[0] as { id: number; name: string; color: string; isGenre: number; isPinned: number }
+  return c.json({
+    tag: { ...row, isGenre: row.isGenre === 1, isPinned: row.isPinned === 1 },
+    version: versionFrom(results),
+  })
 })
 
 /** Refuse une proposition (ou toutes celles d'un album) : elle ne sera plus proposée. */

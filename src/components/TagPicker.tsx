@@ -1,5 +1,6 @@
-import { useState, type KeyboardEvent } from 'react'
+import { Fragment, useState, type KeyboardEvent } from 'react'
 import { TAG_NAME_MAX, normalizeTagName } from '../../shared/tags'
+import { tagGroupLabel } from '../lib/groups'
 import { normalize } from '../lib/text'
 import type { Tag } from '../lib/types'
 import { createTag } from '../store'
@@ -62,17 +63,15 @@ export function TagPicker({ tags, stateOf, onToggle, onCreated, placeholder = 'C
         onKeyDown={onKeyDown}
       />
       <div className="chips-wrap">
-        {visible
-          .filter((tag) => !tag.isGenre)
-          .map((tag) => (
-            <TagChip key={tag.id} label={tag.name} color={tag.color} state={stateOf(tag)} onClick={() => onToggle(tag)} />
-          ))}
-        {visible.some((tag) => tag.isGenre) && <span className="chips-label">Genres</span>}
-        {visible
-          .filter((tag) => tag.isGenre)
-          .map((tag) => (
-            <TagChip key={tag.id} label={tag.name} color={tag.color} state={stateOf(tag)} onClick={() => onToggle(tag)} />
-          ))}
+        {visible.map((tag, index) => {
+          const group = tagGroupLabel(visible, index)
+          return (
+            <Fragment key={tag.id}>
+              {group && <span className="chips-label">{group}</span>}
+              <TagChip label={tag.name} color={tag.color} state={stateOf(tag)} onClick={() => onToggle(tag)} />
+            </Fragment>
+          )
+        })}
         {name && !exact && (
           <button type="button" className="chip create" onClick={create} disabled={creating}>
             + Créer « {name} »

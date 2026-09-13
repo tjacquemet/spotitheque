@@ -24,6 +24,8 @@ export interface Tag {
   color: string
   /** Tag de genre musical : regroupé en fin de liste, après les autres tags. */
   isGenre: boolean
+  /** Tag épinglé : regroupé en tête de liste, avant les autres tags. */
+  isPinned: boolean
 }
 
 export interface LibraryData {

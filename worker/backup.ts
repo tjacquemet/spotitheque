@@ -7,8 +7,12 @@ import { asObject, parseList, parseSyncAlbum, parseTagName } from './validate'
 
 export const backupRoutes = new Hono<AppEnv>()
 
-const EXPORT_TAGS =
-  "SELECT json_object('name', name, 'color', color, 'isGenre', json(CASE is_genre WHEN 1 THEN 'true' ELSE 'false' END)) AS j FROM tags ORDER BY name_key"
+const EXPORT_TAGS = `
+SELECT json_object(
+  'name', name, 'color', color,
+  'isGenre', json(CASE is_genre WHEN 1 THEN 'true' ELSE 'false' END),
+  'isPinned', json(CASE is_pinned WHEN 1 THEN 'true' ELSE 'false' END)
+) AS j FROM tags ORDER BY name_key`
 const EXPORT_ALBUMS = `
 SELECT json_object(
   'id', a.id, 'name', a.name, 'artists', json(a.artists), 'image', a.image_url, 'imageLarge', a.image_url_large,
@@ -38,14 +42,19 @@ backupRoutes.post('/import', async (c) => {
   const body = asObject(await c.req.json())
   if (body.app !== 'spotitheque' || body.format !== 1) throw badRequest("Ce fichier n'est pas une sauvegarde Spotithèque.")
 
-  const tags = new Map<string, { name: string; key: string; color: string; isGenre: number }>()
-  const addTag = (rawName: unknown, rawColor?: unknown, rawIsGenre?: unknown) => {
+  const tags = new Map<string, { name: string; key: string; color: string; isGenre: number; isPinned: number }>()
+  const addTag = (rawName: unknown, rawColor?: unknown, rawIsGenre?: unknown, rawIsPinned?: unknown) => {
     const { name, key } = parseTagName(rawName)
     const color = (TAG_COLORS as readonly unknown[]).includes(rawColor) ? (rawColor as string) : TAG_COLORS[tags.size % TAG_COLORS.length]
-    if (!tags.has(key)) tags.set(key, { name, key, color, isGenre: rawIsGenre === true ? 1 : 0 })
+    if (!tags.has(key)) {
+      tags.set(key, { name, key, color, isGenre: rawIsGenre === true ? 1 : 0, isPinned: rawIsPinned === true ? 1 : 0 })
+    }
     return key
   }
-  parseList(body.tags, 2000, (t) => addTag(asObject(t).name, asObject(t).color, asObject(t).isGenre))
+  parseList(body.tags, 2000, (t) => {
+    const o = asObject(t)
+    return addTag(o.name, o.color, o.isGenre, o.isPinned)
+  })
 
   const links: [string, string][] = []
   const albums = parseList(body.albums, 50_000, (raw) => {
@@ -59,9 +68,9 @@ backupRoutes.post('/import', async (c) => {
   const now = nowIso()
   const stmts: D1PreparedStatement[] = [
     db.prepare(
-      `INSERT INTO tags (name, name_key, color, is_genre)
+      `INSERT INTO tags (name, name_key, color, is_genre, is_pinned)
        SELECT json_extract(value, '$.name'), json_extract(value, '$.key'), json_extract(value, '$.color'),
-              json_extract(value, '$.isGenre')
+              json_extract(value, '$.isGenre'), json_extract(value, '$.isPinned')
        FROM json_each(?) WHERE true ON CONFLICT(name_key) DO NOTHING`,
     ).bind(JSON.stringify([...tags.values()])),
   ]

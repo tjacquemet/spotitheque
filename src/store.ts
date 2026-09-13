@@ -2,8 +2,9 @@ import { useSyncExternalStore } from 'react'
 import type { AlbumRow, LibraryPayload, SyncAlbum } from '../shared/api'
 import { normalizeTagName, tagSortKey } from '../shared/tags'
 import { api } from './api'
-import { idbDelete, idbGet, idbSet } from './lib/idb'
 import { logAction } from './lib/activity'
+import { tagGroup } from './lib/groups'
+import { idbDelete, idbGet, idbSet } from './lib/idb'
 import { lookupAlbums } from './lib/lookup'
 import { SAVED_ALBUMS_URL, SpotifyTokenRejected, fetchSavedAlbumsPage, isUnchanged, toSyncAlbum } from './lib/spotify'
 import { compareText, normalize } from './lib/text'
@@ -92,11 +93,11 @@ function rowToAlbum([
   }
 }
 
-/** Tags classés par nom, les genres musicaux regroupés à la fin. */
+/** Tags classés par groupe (épinglés, ordinaires, genres) puis par nom. */
 function withTags(d: LibraryData, tags: Tag[]): LibraryData {
   const sorted = [...tags].sort(
     (a, b) =>
-      Number(a.isGenre) - Number(b.isGenre) ||
+      tagGroup(a) - tagGroup(b) ||
       compareText(tagSortKey(a.name), tagSortKey(b.name)) ||
       compareText(a.name, b.name),
   )
@@ -112,7 +113,10 @@ export function fromPayload(p: LibraryPayload): LibraryData {
     set.add(tagId)
   }
   const base: LibraryData = { version: p.version, albums, albumsById: new Map(albums.map((a) => [a.id, a])), tags: [], tagsById: new Map(), links }
-  return withTags(base, p.tags.map(([id, name, color, isGenre]) => ({ id, name, color, isGenre: isGenre === 1 })))
+  return withTags(
+    base,
+    p.tags.map(([id, name, color, isGenre, isPinned]) => ({ id, name, color, isGenre: isGenre === 1, isPinned: isPinned === 1 })),
+  )
 }
 
 function toPayload(d: LibraryData): LibraryPayload {
@@ -130,7 +134,7 @@ function toPayload(d: LibraryData): LibraryPayload {
       a.inLibrary ? 1 : 0,
       a.lastPlayedAt,
     ]),
-    tags: d.tags.map((t) => [t.id, t.name, t.color, t.isGenre ? 1 : 0]),
+    tags: d.tags.map((t) => [t.id, t.name, t.color, t.isGenre ? 1 : 0, t.isPinned ? 1 : 0]),
     links: [...d.links].flatMap(([albumId, tags]) => [...tags].map((tagId): [string, number] => [albumId, tagId])),
   }
 }
@@ -260,7 +264,7 @@ export function createTag(name: string): Promise<Tag> {
   })
 }
 
-export function updateTag(id: number, patch: { name?: string; color?: string; isGenre?: boolean }): Promise<void> {
+export function updateTag(id: number, patch: { name?: string; color?: string; isGenre?: boolean; isPinned?: boolean }): Promise<void> {
   const clean = patch.name !== undefined ? { ...patch, name: normalizeTagName(patch.name).name } : patch
   return optimistic(
     (d) => withTags(d, d.tags.map((t) => (t.id === id ? { ...t, ...clean } : t))),

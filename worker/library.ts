@@ -37,7 +37,7 @@ const LIBRARY_QUERIES = [
   "SELECT CAST(value AS INTEGER) AS j FROM settings WHERE key = 'data_version'",
   `SELECT json_array(id, name, json(artists), image_url, image_url_large, release_date, total_tracks, added_at, in_library, last_played_at) AS j
    FROM albums`,
-  'SELECT json_array(id, name, color, is_genre) AS j FROM tags ORDER BY name_key',
+  'SELECT json_array(id, name, color, is_genre, is_pinned) AS j FROM tags ORDER BY name_key',
   'SELECT json_array(album_id, tag_id) AS j FROM album_tags',
 ]
 
@@ -143,16 +143,17 @@ async function nextColor(db: D1Database): Promise<string> {
   return best
 }
 
-const TAG_FIELDS = 'id, name, color, is_genre AS isGenre'
+const TAG_FIELDS = 'id, name, color, is_genre AS isGenre, is_pinned AS isPinned'
 
 interface TagRecord {
   id: number
   name: string
   color: string
   isGenre: number
+  isPinned: number
 }
 
-const toTagDto = (row: TagRecord): TagDto => ({ ...row, isGenre: row.isGenre === 1 })
+const toTagDto = (row: TagRecord): TagDto => ({ ...row, isGenre: row.isGenre === 1, isPinned: row.isPinned === 1 })
 
 async function requireTag(db: D1Database, id: number): Promise<TagDto> {
   const tag = await db.prepare(`SELECT ${TAG_FIELDS} FROM tags WHERE id = ?`).bind(id).first<TagRecord>()
@@ -199,12 +200,17 @@ libraryRoutes.patch('/tags/:id', async (c) => {
     sets.push('is_genre = ?')
     binds.push(body.isGenre ? 1 : 0)
   }
+  if (body.isPinned !== undefined) {
+    if (typeof body.isPinned !== 'boolean') throw badRequest('isPinned doit être un booléen.')
+    sets.push('is_pinned = ?')
+    binds.push(body.isPinned ? 1 : 0)
+  }
   if (sets.length === 0) throw badRequest('Rien à modifier.')
   try {
     const results = await db.batch([
       db.prepare(`UPDATE tags SET ${sets.join(', ')} WHERE id = ?`).bind(...binds, id),
       db.prepare(`SELECT ${TAG_FIELDS} FROM tags WHERE id = ?`).bind(id),
-      activityStmt(db, 'tag.modifie', { id, nom: body.name, couleur: body.color, genre: body.isGenre }),
+      activityStmt(db, 'tag.modifie', { id, nom: body.name, couleur: body.color, genre: body.isGenre, epingle: body.isPinned }),
       bumpVersionStmt(db),
     ])
     return c.json({ tag: toTagDto(results[1].results[0] as TagRecord), version: versionFrom(results) })
