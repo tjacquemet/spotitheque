@@ -1,6 +1,7 @@
-import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import type { SpotifyStatus } from '../../shared/api'
 import { countTags, filterAlbums, hasActiveFilters, sortAlbums } from '../lib/filter'
+import { tagGroupLabel } from '../lib/groups'
 import { plural } from '../lib/text'
 import { EMPTY_FILTERS, type Filters, type SortKey, type Tag } from '../lib/types'
 import { deleteAlbums, refreshLibrary, runSuggestions, runSync, useLibrary } from '../store'
@@ -408,7 +409,16 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
                 />
               )}
               {otherTags.length > 0 && <span className="tagbar-sep" />}
-              {otherTags.map(renderTag)}
+              {/* Mêmes groupes que dans les listes : épinglés, ordinaires, genres. */}
+              {otherTags.map((tag, index) => {
+                const group = tagGroupLabel(otherTags, index)
+                return (
+                  <Fragment key={tag.id}>
+                    {group && <span className="tagbar-label">{group}</span>}
+                    {renderTag(tag)}
+                  </Fragment>
+                )
+              })}
             </div>
           </div>
         )}

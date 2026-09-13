@@ -302,6 +302,17 @@ a {
   background: var(--border);
 }
 
+/* Intitulé de groupe dans la barre horizontale, à la place du trait de séparation. */
+.tagbar-label {
+  flex: none;
+  padding-left: 2px;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .chip {
   --tag: var(--text-2);
   flex: none;
