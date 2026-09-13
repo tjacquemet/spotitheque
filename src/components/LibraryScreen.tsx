@@ -1,29 +1,22 @@
-import { Fragment, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import type { SpotifyStatus } from '../../shared/api'
 import { countTags, filterAlbums, hasActiveFilters, sortAlbums } from '../lib/filter'
-import { tagGroupLabel } from '../lib/groups'
 import { plural } from '../lib/text'
-import { EMPTY_FILTERS, type Filters, type SortKey, type Tag } from '../lib/types'
+import { EMPTY_FILTERS, type Filters, type SortKey } from '../lib/types'
 import { deleteAlbums, refreshLibrary, runSuggestions, runSync, useLibrary } from '../store'
 import { toast, toastError } from '../toast'
 import { AlbumGrid } from './AlbumGrid'
 import { AlbumSheet } from './AlbumSheet'
 import { BulkTagSheet } from './BulkTagSheet'
-import { CloseIcon, DiceIcon, DiscIcon, SearchIcon, SelectIcon, SettingsIcon, SparkleIcon, SyncIcon, TagIcon, TrashIcon } from './Icons'
+import { CloseIcon, DiscIcon, SearchIcon, SelectIcon, SettingsIcon, SyncIcon, TagIcon, TrashIcon } from './Icons'
+import { LibraryToolbar, SORTS } from './LibraryToolbar'
 import { Sheet } from './Sheet'
-import { TagChip, type ChipState } from './TagChip'
+import { SuggestSheet } from './SuggestSheet'
+import { TagBar } from './TagBar'
 import { TagFilterPanel } from './TagFilterPanel'
 
 const SORT_STORAGE = 'spotitheque.sort'
 const HINT_STORAGE = 'spotitheque.hint-exclude'
-const SORTS: Record<SortKey, string> = {
-  played: 'Écoute',
-  added: 'Ajout',
-  artist: 'Artiste',
-  title: 'Titre',
-  year: 'Année',
-  random: 'Aléatoire',
-}
 
 function readStorage(key: string): string | null {
   try {
@@ -105,21 +98,6 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
     return () => observer.disconnect()
   }, [])
 
-  // Les tags actifs passent en tête de la barre, qui revient au début : ils restent visibles.
-  const { activeTags, otherTags } = useMemo(() => {
-    if (!data) return { activeTags: [], otherTags: [] }
-    const ids = [...effective.include, ...effective.exclude]
-    return {
-      activeTags: ids.map((id) => data.tagsById.get(id)!),
-      otherTags: data.tags.filter((t) => !ids.includes(t.id)),
-    }
-  }, [data, effective.include, effective.exclude])
-  const tagbar = useRef<HTMLDivElement>(null)
-  const activeKey = `${effective.include.join()}|${effective.exclude.join()}`
-  useEffect(() => {
-    tagbar.current?.scrollTo({ left: 0, behavior: 'smooth' })
-  }, [activeKey])
-
   const setSort = (value: SortKey) => {
     setSortState(value)
     writeStorage(SORT_STORAGE, value)
@@ -131,9 +109,6 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
     setFilters(EMPTY_FILTERS)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
-
-  const tagState = (id: number): ChipState =>
-    effective.include.includes(id) ? 'on' : effective.exclude.includes(id) ? 'excluded' : 'off'
 
   const tapTag = (id: number) =>
     setFilters((f) => {
@@ -151,24 +126,6 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
       f.exclude.includes(id)
         ? { ...f, exclude: f.exclude.filter((x) => x !== id) }
         : { ...f, exclude: [...f.exclude, id], include: f.include.filter((x) => x !== id) },
-    )
-  }
-
-  const renderTag = (tag: Tag) => {
-    const state = tagState(tag.id)
-    const count = counts.get(tag.id) ?? 0
-    return (
-      <TagChip
-        key={tag.id}
-        label={tag.name}
-        color={tag.color}
-        state={state}
-        count={state === 'excluded' ? undefined : count}
-        muted={state === 'off' && count === 0}
-        onClick={() => tapTag(tag.id)}
-        onLongPress={() => longPressTag(tag.id)}
-        title="Toucher pour filtrer, appui long pour exclure"
-      />
     )
   }
 
@@ -260,6 +217,24 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
     toast(plural(count, 'album supprimé', 'albums supprimés'))
     setSelection(new Set())
   }
+
+  // Le même panneau des deux côtés : colonne de gauche sur grand écran, feuille sur téléphone.
+  const filterPanel =
+    data && data.albums.length > 0 ? (
+      <TagFilterPanel
+        tags={data.tags}
+        counts={counts}
+        filters={effective}
+        untaggedCount={untaggedCount}
+        untaggedLabel={untaggedLabel}
+        removedCount={removedCount}
+        active={active}
+        onToggle={tapTag}
+        onToggleExclude={longPressTag}
+        setFilters={setFilters}
+        onClear={() => setFilters(EMPTY_FILTERS)}
+      />
+    ) : null
 
   let body
   if (!data) {
@@ -384,111 +359,47 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
 
         {/* Sur téléphone : bouton vers la liste complète, puis les tags actifs et les autres. */}
         {data && data.albums.length > 0 && (
-          <div className="tagbar-row">
-            <button type="button" className="chip tagbar-open" onClick={() => setTagPanelOpen(true)}>
-              <TagIcon size={15} /> Tags
-              {effective.include.length + effective.exclude.length > 0 && (
-                <span className="chip-badge">{effective.include.length + effective.exclude.length}</span>
-              )}
-            </button>
-            <div className="tagbar" role="toolbar" aria-label="Filtrer par tags" ref={tagbar}>
-              {activeTags.map(renderTag)}
-              {activeTags.length > 0 && <span className="tagbar-sep" />}
-              <TagChip
-                label={untaggedLabel}
-                count={untaggedCount}
-                state={filters.untagged ? 'on' : 'off'}
-                onClick={() => setFilters((f) => ({ ...f, untagged: !f.untagged }))}
-              />
-              {removedCount > 0 && (
-                <TagChip
-                  label="Retirés de Spotify"
-                  count={removedCount}
-                  state={filters.removed ? 'on' : 'off'}
-                  onClick={() => setFilters((f) => ({ ...f, removed: !f.removed }))}
-                />
-              )}
-              {otherTags.length > 0 && <span className="tagbar-sep" />}
-              {/* Mêmes groupes que dans les listes : épinglés, ordinaires, genres. */}
-              {otherTags.map((tag, index) => {
-                const group = tagGroupLabel(otherTags, index)
-                return (
-                  <Fragment key={tag.id}>
-                    {group && <span className="tagbar-label">{group}</span>}
-                    {renderTag(tag)}
-                  </Fragment>
-                )
-              })}
-            </div>
-          </div>
+          <TagBar
+            tags={data.tags}
+            counts={counts}
+            filters={effective}
+            untaggedLabel={untaggedLabel}
+            untaggedCount={untaggedCount}
+            removedCount={removedCount}
+            onToggle={tapTag}
+            onToggleExclude={longPressTag}
+            setFilters={setFilters}
+            onOpenPanel={() => setTagPanelOpen(true)}
+          />
         )}
       </header>
 
       <div className="library-body">
-        {data && data.albums.length > 0 && (
+        {filterPanel && (
           <aside className="sidebar" aria-label="Filtrer par tags">
-            <TagFilterPanel
-              tags={data.tags}
-              counts={counts}
-              filters={effective}
-              untaggedCount={untaggedCount}
-              untaggedLabel={untaggedLabel}
-              removedCount={removedCount}
-              active={active}
-              onToggle={tapTag}
-              onToggleExclude={longPressTag}
-              setFilters={setFilters}
-              onClear={() => setFilters(EMPTY_FILTERS)}
-            />
+            {filterPanel}
           </aside>
         )}
 
         <div className="library-main">
-      {data && data.albums.length > 0 && (
-        <div className="toolbar">
-          <span className="result-count">{plural(results.length, 'album', 'albums')}</span>
-          {effective.include.length >= 2 && (
-            <div className="segmented" role="group" aria-label="Combinaison des tags">
-              <button type="button" className={effective.mode === 'and' ? 'active' : ''} onClick={() => setFilters((f) => ({ ...f, mode: 'and' }))} title="Tous les tags">
-                ET
-              </button>
-              <button type="button" className={effective.mode === 'or' ? 'active' : ''} onClick={() => setFilters((f) => ({ ...f, mode: 'or' }))} title="Au moins un tag">
-                OU
-              </button>
-            </div>
+          {data && data.albums.length > 0 && (
+            <LibraryToolbar
+              resultCount={results.length}
+              filters={effective}
+              active={active}
+              sort={sort}
+              pendingSuggestions={pendingSuggestions}
+              setFilters={setFilters}
+              onClearFilters={() => setFilters(EMPTY_FILTERS)}
+              onSort={setSort}
+              onOpenSuggest={() => setSuggestOpen(true)}
+              onSurprise={surprise}
+            />
           )}
-          {active && (
-            <button type="button" className="link-btn" onClick={() => setFilters(EMPTY_FILTERS)}>
-              Effacer
-            </button>
-          )}
-          <span className="spacer" />
-          <select className="select" value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label="Trier par">
-            {Object.entries(SORTS).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            className="icon-btn suggest-btn"
-            onClick={() => setSuggestOpen(true)}
-            aria-label="Suggestions de tags"
-            title="Suggestions de tags"
-          >
-            <SparkleIcon />
-            {pendingSuggestions > 0 && <span className="badge">{pendingSuggestions}</span>}
-          </button>
-          <button type="button" className="icon-btn accent" onClick={surprise} aria-label="Surprends-moi" title="Surprends-moi">
-            <DiceIcon />
-          </button>
-        </div>
-      )}
 
-      {!hintSeen && effective.include.length > 0 && effective.exclude.length === 0 && (
-        <p className="hint hint-bar">Astuce : un appui long sur un tag exclut les albums qui l'ont.</p>
-      )}
+          {!hintSeen && effective.include.length > 0 && effective.exclude.length === 0 && (
+            <p className="hint hint-bar">Astuce : un appui long sur un tag exclut les albums qui l'ont.</p>
+          )}
 
           <main>{body}</main>
         </div>
@@ -517,56 +428,22 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
         />
       )}
       {suggestOpen && (
-        <Sheet onClose={() => setSuggestOpen(false)} label="Suggestions de tags">
-          <h2 className="sheet-title">Suggestions de tags</h2>
-          <p className="hint">
-            Chaque album est retrouvé dans MusicBrainz, l'encyclopédie musicale libre, et c'est sa fiche — jamais les
-            données Spotify — qui est analysée avec la liste de tes tags. Tu valides ensuite chaque proposition.
-          </p>
-          {suggestRun ? (
-            <>
-              <div className="progress" aria-hidden="true">
-                <div style={{ width: `${suggestRun.total ? (100 * suggestRun.done) / suggestRun.total : 0}%` }} />
-              </div>
-              <p className="hint">
-                Analyse en cours : {suggestRun.done} / {suggestRun.total} albums. Tu peux fermer cette fenêtre, ça continue.
-              </p>
-            </>
-          ) : (
-            <button type="button" className="btn btn-primary btn-block" onClick={analyze}>
-              <SparkleIcon /> Analyser {analysisLabel}
-            </button>
-          )}
-          {pendingSuggestions > 0 && (
-            <button
-              type="button"
-              className="btn btn-block"
-              onClick={() => {
-                setSuggestOpen(false)
-                onNavigate('suggestions')
-              }}
-            >
-              Voir {plural(pendingSuggestions, 'proposition', 'propositions')}
-            </button>
-          )}
-        </Sheet>
+        <SuggestSheet
+          analysisLabel={analysisLabel}
+          pendingSuggestions={pendingSuggestions}
+          progress={suggestRun}
+          onAnalyze={analyze}
+          onSeeSuggestions={() => {
+            setSuggestOpen(false)
+            onNavigate('suggestions')
+          }}
+          onClose={() => setSuggestOpen(false)}
+        />
       )}
-      {tagPanelOpen && data && (
+      {tagPanelOpen && filterPanel && (
         <Sheet onClose={() => setTagPanelOpen(false)} label="Filtrer par tags">
           <h2 className="sheet-title">Filtrer par tags</h2>
-          <TagFilterPanel
-            tags={data.tags}
-            counts={counts}
-            filters={effective}
-            untaggedCount={untaggedCount}
-            untaggedLabel={untaggedLabel}
-            removedCount={removedCount}
-            active={active}
-            onToggle={tapTag}
-            onToggleExclude={longPressTag}
-            setFilters={setFilters}
-            onClear={() => setFilters(EMPTY_FILTERS)}
-          />
+          {filterPanel}
           <button type="button" className="btn btn-block" onClick={() => setTagPanelOpen(false)}>
             Voir les {plural(results.length, 'album', 'albums')}
           </button>

@@ -1,6 +1,5 @@
-import { readFileSync, readdirSync } from 'node:fs'
-import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import headers from '../../public/_headers?raw'
 
 // La politique de sécurité de l'appli décide des domaines que le navigateur accepte d'appeler.
 // Un domaine oublié dans `connect-src` et la requête ne part jamais, sans erreur visible : le
@@ -8,32 +7,29 @@ import { describe, expect, it } from 'vitest'
 // Ce test relie les deux : tout domaine écrit dans src/lib, d'où partent les appels sortants,
 // doit être autorisé — ou déclaré ici comme simple lien, ouvert par l'utilisateur et non par fetch.
 
-const LIB = join(import.meta.dirname, '.')
 /** Domaines qu'on ouvre dans un onglet sans jamais les appeler : ils n'ont rien à faire dans connect-src. */
 const NAVIGATION_ONLY = ['https://open.spotify.com']
 
+const sources = import.meta.glob('./*.ts', { query: '?raw', import: 'default', eager: true }) as Record<string, string>
+
 function hostsUsedInLib(): string[] {
-  const files = readdirSync(LIB).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'))
   const found = new Set<string>()
-  for (const file of files) {
-    for (const [url] of readFileSync(join(LIB, file), 'utf8').matchAll(/https:\/\/[a-z0-9.-]+/g)) {
+  for (const [path, source] of Object.entries(sources)) {
+    if (path.endsWith('.test.ts')) continue
+    for (const [url] of source.matchAll(/https:\/\/[a-z0-9.-]+/g)) {
       if (!NAVIGATION_ONLY.includes(url)) found.add(url)
     }
   }
   return [...found]
 }
 
-function connectSrc(): string[] {
-  const headers = readFileSync(join(import.meta.dirname, '../../public/_headers'), 'utf8')
-  return (headers.match(/connect-src ([^;]+);/)?.[1] ?? '').trim().split(/\s+/)
-}
+const connectSrc = (headers.match(/connect-src ([^;]+);/)?.[1] ?? '').trim().split(/\s+/)
 
 describe('Content-Security-Policy', () => {
   it('autorise tous les domaines appelés depuis le navigateur', () => {
-    const allowed = connectSrc()
-    expect(allowed).toContain("'self'")
+    expect(connectSrc).toContain("'self'")
     for (const host of hostsUsedInLib()) {
-      expect(allowed, `${host} doit figurer dans connect-src de public/_headers`).toContain(host)
+      expect(connectSrc, `${host} doit figurer dans connect-src de public/_headers`).toContain(host)
     }
   })
 

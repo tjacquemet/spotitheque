@@ -38,12 +38,17 @@ interface EnrichedAlbum {
   genres: string
 }
 
-/** Tags existants, avec leur nombre d'albums : ils servent de vocabulaire au modèle. */
+/**
+ * Tags existants, avec leur nombre d'albums : ils servent de vocabulaire au modèle.
+ * Les tags épinglés en sont écartés : « À écouter », « All time favorites » relèvent d'une décision
+ * du propriétaire, que rien dans la fiche d'un album ne permet de deviner.
+ */
 async function tagVocabulary(db: D1Database) {
   const { results } = await db
     .prepare(
       `SELECT t.name, t.is_genre AS isGenre, count(x.album_id) AS albums
        FROM tags t LEFT JOIN album_tags x ON x.tag_id = t.id
+       WHERE t.is_pinned = 0
        GROUP BY t.id ORDER BY albums DESC`,
     )
     .all<{ name: string; isGenre: number; albums: number }>()
@@ -173,7 +178,10 @@ async function saveSuggestions(db: D1Database, albums: EnrichedAlbum[], answers:
   return rows.length
 }
 
-/** Propositions gratuites : les tags posés sur les autres albums du même artiste. */
+/**
+ * Propositions gratuites : les tags posés sur les autres albums du même artiste.
+ * Les tags épinglés en sont écartés, pour la même raison que dans le vocabulaire du modèle.
+ */
 const SAME_ARTIST_SQL = `
 INSERT OR IGNORE INTO suggestions (album_id, label, label_key, tag_id, source, score)
 SELECT a.id, t.name, t.name_key, t.id, 'artist', 0.85
@@ -181,8 +189,81 @@ FROM json_each(?1) sel
 JOIN albums a ON a.id = sel.value
 JOIN albums other ON other.artists = a.artists AND other.id <> a.id
 JOIN album_tags x ON x.album_id = other.id
-JOIN tags t ON t.id = x.tag_id
+JOIN tags t ON t.id = x.tag_id AND t.is_pinned = 0
 WHERE NOT EXISTS (SELECT 1 FROM album_tags cur WHERE cur.album_id = a.id AND cur.tag_id = t.id)`
+
+/**
+ * Soumet un lot d'albums au modèle et enregistre ses propositions.
+ * `answered` dit si un modèle a produit une réponse exploitable : sinon les albums restent à analyser.
+ */
+async function analyzeAlbums(env: Env, albums: EnrichedAlbum[]): Promise<{ suggested: number; answered: boolean }> {
+  if (albums.length === 0) return { suggested: 0, answered: true }
+  const db = env.DB
+  const { system, user } = buildPrompt(albums, await tagVocabulary(db))
+  let parsed: ModelSuggestion[] = []
+  for (const model of MODELS) {
+    const answer = await env.AI.run(model, {
+      messages: [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+      max_tokens: MAX_TOKENS,
+    })
+    parsed = parseModelAnswer(extractText(answer))
+    if (parsed.length > 0) break
+    // Journalisé tel quel : c'est la seule trace exploitable quand le modèle répond hors format.
+    await recordActivity(db, 'suggest.reponse_illisible', {
+      modele: model,
+      fin: finishReason(answer),
+      albums: albums.map((a) => a.title),
+      reponse: extractText(answer).slice(0, 400) || JSON.stringify(answer).slice(0, 400),
+    })
+  }
+
+  const suggested = await saveSuggestions(db, albums, parsed)
+  // Marque « analysé » posée seulement si un modèle a répondu : un album muet doit rester à traiter,
+  // sinon une panne passagère du modèle l'écarte définitivement des propositions.
+  if (parsed.length > 0) {
+    await db
+      .prepare(
+        `INSERT OR IGNORE INTO suggestions (album_id, label, label_key, tag_id, source, score, status)
+         SELECT value, '', '', NULL, 'ai', 0, 'rejected' FROM json_each(?1)`,
+      )
+      .bind(JSON.stringify(albums.map((a) => a.id)))
+      .run()
+  }
+  return { suggested, answered: parsed.length > 0 }
+}
+
+/** Albums déjà documentés que le modèle n'a jamais vus, les plus récemment ajoutés d'abord. */
+const PENDING_SQL = `
+SELECT mb.album_id AS id, mb.title, mb.artist, mb.year, mb.genres
+FROM album_lookup mb
+JOIN albums a ON a.id = mb.album_id AND a.in_library = 1
+WHERE mb.status = 'found' AND mb.lookup_version >= ?1
+  AND NOT EXISTS (SELECT 1 FROM suggestions s WHERE s.album_id = mb.album_id AND s.source = 'ai')
+ORDER BY a.added_at DESC LIMIT ?2`
+
+/**
+ * Analyse de nuit : les albums documentés lors des passes précédentes mais jamais soumis au modèle,
+ * pour que les propositions attendent déjà à l'ouverture. La recherche des fiches, elle, reste au
+ * navigateur — les adresses IP de Cloudflare se font brider par les bases musicales.
+ */
+export async function analyzePendingAlbums(env: Env, maxBatches: number): Promise<{ analyzed: number; suggested: number }> {
+  let analyzed = 0
+  let suggested = 0
+  for (let batch = 0; batch < maxBatches; batch++) {
+    const { results } = await env.DB.prepare(PENDING_SQL).bind(LOOKUP_VERSION, ANALYZE_PER_RUN).all<EnrichedAlbum>()
+    if (results.length === 0) break
+    const pass = await analyzeAlbums(env, results)
+    analyzed += results.length
+    suggested += pass.suggested
+    // Le modèle ne répond pas : inutile d'épuiser le quota cette nuit.
+    if (!pass.answered) break
+  }
+  if (suggested > 0) await bumpVersionStmt(env.DB).run()
+  return { analyzed, suggested }
+}
 
 const REMAINING_SQL = `
 SELECT count(*) AS n FROM json_each(?1) sel
@@ -283,42 +364,7 @@ suggestRoutes.post('/suggestions/run', async (c) => {
     .bind(selection, ANALYZE_PER_RUN)
     .all<EnrichedAlbum>()
 
-  let suggested = 0
-  if (toAnalyze.length > 0) {
-    const vocabulary = await tagVocabulary(db)
-    const { system, user } = buildPrompt(toAnalyze, vocabulary)
-    let parsed: ModelSuggestion[] = []
-    for (const model of MODELS) {
-      const answer = await c.env.AI.run(model, {
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: user },
-        ],
-        max_tokens: MAX_TOKENS,
-      })
-      parsed = parseModelAnswer(extractText(answer))
-      if (parsed.length > 0) break
-      // Journalisé tel quel : c'est la seule trace exploitable quand le modèle répond hors format.
-      await recordActivity(db, 'suggest.reponse_illisible', {
-        modele: model,
-        fin: finishReason(answer),
-        albums: toAnalyze.map((a) => a.title),
-        reponse: extractText(answer).slice(0, 400) || JSON.stringify(answer).slice(0, 400),
-      })
-    }
-    suggested = await saveSuggestions(db, toAnalyze, parsed)
-    // Marque « analysé » posée seulement si un modèle a répondu : un album muet doit rester à traiter,
-    // sinon une panne passagère du modèle l'écarte définitivement des propositions.
-    if (parsed.length > 0) {
-      await db
-        .prepare(
-          `INSERT OR IGNORE INTO suggestions (album_id, label, label_key, tag_id, source, score, status)
-           SELECT value, '', '', NULL, 'ai', 0, 'rejected' FROM json_each(?1)`,
-        )
-        .bind(JSON.stringify(toAnalyze.map((a) => a.id)))
-        .run()
-    }
-  }
+  const { suggested } = await analyzeAlbums(c.env, toAnalyze)
 
   const remaining = await db.prepare(REMAINING_SQL).bind(selection, LOOKUP_VERSION).first<{ n: number }>()
   const version = suggested > 0 ? versionFrom([await bumpVersionStmt(db).run()]) : null
