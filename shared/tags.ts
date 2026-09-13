@@ -12,6 +12,7 @@ export const TAG_COLORS = [
   '#818cf8',
   '#c084fc',
   '#f472b6',
+  '#ffffff',
 ] as const
 
 export const TAG_NAME_MAX = 40
