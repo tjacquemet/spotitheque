@@ -66,9 +66,21 @@ function Main({ me, setMe, onLogout }: MainProps) {
   }, [setMe])
 
   useEffect(() => {
-    void loadLibrary().then(autoSync)
+    void loadLibrary().then(() => {
+      // Ce que l'appli a réellement sous la main : version du code, largeur d'écran (donc quelle
+      // disposition), et les tags tels qu'elle les voit. De quoi expliquer un « chez moi ça n'apparaît pas ».
+      const d = getLibrary()
+      logAction('app.ouverte', {
+        version: runningVersion,
+        largeur: window.innerWidth,
+        donnees: d?.version ?? null,
+        tags: d?.tags.length ?? 0,
+        epingles: d?.tags.filter((t) => t.isPinned).length ?? 0,
+        genres: d?.tags.filter((t) => t.isGenre).length ?? 0,
+      })
+      return autoSync()
+    })
     void loadSuggestions().catch(() => undefined)
-    logAction('app.ouverte', { version: runningVersion })
   }, [autoSync])
 
   // Retour au premier plan : données à jour (autre appareil), nouveaux albums Spotify,
