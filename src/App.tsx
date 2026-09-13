@@ -7,7 +7,9 @@ import { SettingsScreen } from './components/SettingsScreen'
 import { SuggestionsScreen } from './components/SuggestionsScreen'
 import { TagsScreen } from './components/TagsScreen'
 import { Toaster } from './components/Toaster'
+import { logAction } from './lib/activity'
 import { plural } from './lib/text'
+import { isOutdated, runningVersion } from './lib/version'
 import { getLibrary, loadLibrary, loadSuggestions, refreshLibrary, resetLibrary, runSync } from './store'
 import { toast, toastError } from './toast'
 
@@ -32,6 +34,7 @@ interface MainProps {
 function Main({ me, setMe, onLogout }: MainProps) {
   const [screen, setScreen] = useState<Screen>('library')
   const [scopeMissing, setScopeMissing] = useState(false)
+  const [outdated, setOutdated] = useState(false)
   const libraryScroll = useRef(0)
   const lastSync = useRef(0)
   const meRef = useRef(me)
@@ -65,15 +68,19 @@ function Main({ me, setMe, onLogout }: MainProps) {
   useEffect(() => {
     void loadLibrary().then(autoSync)
     void loadSuggestions().catch(() => undefined)
+    logAction('app.ouverte', { version: runningVersion })
   }, [autoSync])
 
-  // Retour au premier plan : données à jour (autre appareil) et nouveaux albums Spotify.
+  // Retour au premier plan : données à jour (autre appareil), nouveaux albums Spotify,
+  // et vérification de la version — un onglet de téléphone survit à plusieurs déploiements.
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return
       void refreshLibrary()
+      void isOutdated().then(setOutdated)
       if (Date.now() - lastSync.current > QUICK_SYNC_EVERY_MS) void autoSync()
     }
+    void isOutdated().then(setOutdated)
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [autoSync])
@@ -89,6 +96,14 @@ function Main({ me, setMe, onLogout }: MainProps) {
 
   return (
     <div className="app">
+      {outdated && (
+        <div className="banner" role="status">
+          <span>Une nouvelle version de Spotithèque est en ligne.</span>
+          <button type="button" className="banner-action" onClick={() => window.location.reload()}>
+            Recharger
+          </button>
+        </div>
+      )}
       {me?.spotify === 'reauth' && (
         <div className="banner" role="status">
           <span>Spotify est déconnecté : lecture et synchro en pause.</span>

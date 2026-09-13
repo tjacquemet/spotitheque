@@ -1335,10 +1335,22 @@ a {
   margin-top: 8px;
 }
 
-.banner a {
+.banner a,
+.banner-action {
   margin-left: auto;
   font-weight: 700;
   white-space: nowrap;
+}
+
+.banner-action {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .toaster {
