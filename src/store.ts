@@ -73,6 +73,7 @@ function rowToAlbum([
   addedAt,
   inLibrary,
   lastPlayedAt,
+  hidden,
 ]: AlbumRow): Album {
   const artistNames = artists.map((a) => a.name).join(', ')
   const year = releaseDate ? Number(releaseDate.slice(0, 4)) || null : null
@@ -89,6 +90,7 @@ function rowToAlbum([
     addedAt,
     inLibrary: inLibrary === 1,
     lastPlayedAt: lastPlayedAt ?? null,
+    hidden: hidden === 1,
     searchText: normalize(`${name} ${artistNames}`),
   }
 }
@@ -133,6 +135,7 @@ function toPayload(d: LibraryData): LibraryPayload {
       a.addedAt,
       a.inLibrary ? 1 : 0,
       a.lastPlayedAt,
+      a.hidden ? 1 : 0,
     ]),
     tags: d.tags.map((t) => [t.id, t.name, t.color, t.isGenre ? 1 : 0, t.isPinned ? 1 : 0]),
     links: [...d.links].flatMap(([albumId, tags]) => [...tags].map((tagId): [string, number] => [albumId, tagId])),
@@ -146,8 +149,9 @@ function toPayload(d: LibraryData): LibraryPayload {
  * antérieur : sans cela, un cache d'une forme ancienne survit indéfiniment, puisque le serveur répond
  * « inchangé » tant que le numéro de version des données correspond, quelle que soit la forme des lignes.
  * 2 : les tags portent leur épinglage.
+ * 3 : les albums portent leur masquage.
  */
-const CACHE_KEY = 'library.2'
+const CACHE_KEY = 'library.3'
 let persistTimer: ReturnType<typeof setTimeout> | undefined
 
 function setData(data: LibraryData) {
@@ -258,6 +262,37 @@ export function deleteAlbums(albumIds: string[]): Promise<void> {
     },
     () => api.deleteAlbums(ids),
   )
+}
+
+/** Masque ou réaffiche des albums dans Spotithèque, sans rien changer côté Spotify. */
+export function setAlbumsHidden(albumIds: string[], hidden: boolean): Promise<void> {
+  if (albumIds.length === 0) return Promise.resolve()
+  const ids = new Set(albumIds)
+  return optimistic(
+    (d) => {
+      const albums = d.albums.map((a) => (ids.has(a.id) ? { ...a, hidden } : a))
+      return { ...d, albums, albumsById: new Map(albums.map((a) => [a.id, a])) }
+    },
+    () => api.hideAlbums(albumIds, hidden),
+  )
+}
+
+/**
+ * Retire un album de la bibliothèque Spotify et le supprime de Spotithèque. Pas de mise à jour optimiste :
+ * l'album ne disparaît qu'une fois Spotify d'accord, pour qu'un refus ne le fasse pas croire parti.
+ */
+export function removeFromSpotify(albumId: string): Promise<void> {
+  return enqueue(async () => {
+    const { version } = await api.removeFromSpotify(albumId)
+    const d = state.data
+    if (d) {
+      const albums = d.albums.filter((a) => a.id !== albumId)
+      const links = new Map(d.links)
+      links.delete(albumId)
+      setData({ ...d, albums, albumsById: new Map(albums.map((a) => [a.id, a])), links })
+    }
+    confirmVersion(version)
+  })
 }
 
 export function createTag(name: string): Promise<Tag> {

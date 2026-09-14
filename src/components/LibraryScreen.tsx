@@ -77,7 +77,9 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
     [data, effective, sort, seed],
   )
   const counts = useMemo(() => (data ? countTags(results, data.links) : new Map<number, number>()), [data, results])
-  const removedCount = useMemo(() => data?.albums.filter((a) => !a.inLibrary).length ?? 0, [data])
+  // Un album masqué ne compte que parmi les masqués, même s'il a aussi quitté Spotify.
+  const removedCount = useMemo(() => data?.albums.filter((a) => !a.inLibrary && !a.hidden).length ?? 0, [data])
+  const hiddenCount = useMemo(() => data?.albums.filter((a) => a.hidden).length ?? 0, [data])
   // Nombre d'albums qui resteraient en activant « Sans tag » / « Sans autre tag » avec les filtres actuels.
   const untaggedCount = useMemo(
     () => (data ? filterAlbums(data.albums, data.links, { ...effective, untagged: true }).length : 0),
@@ -228,6 +230,7 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
         untaggedCount={untaggedCount}
         untaggedLabel={untaggedLabel}
         removedCount={removedCount}
+        hiddenCount={hiddenCount}
         active={active}
         onToggle={tapTag}
         onToggleExclude={longPressTag}
@@ -366,6 +369,7 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
             untaggedLabel={untaggedLabel}
             untaggedCount={untaggedCount}
             removedCount={removedCount}
+            hiddenCount={hiddenCount}
             onToggle={tapTag}
             onToggleExclude={longPressTag}
             setFilters={setFilters}

@@ -1346,6 +1346,12 @@ a {
   margin-top: 28px;
 }
 
+/* Masquer puis retirer : du geste le plus léger au plus définitif. */
+.album-actions {
+  display: grid;
+  gap: 10px;
+}
+
 /* --- Pages Tags et Réglages --- */
 
 .page {

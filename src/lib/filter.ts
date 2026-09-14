@@ -7,7 +7,9 @@ const NO_TAGS: ReadonlySet<number> = new Set()
 export function filterAlbums(albums: Album[], links: Map<string, Set<number>>, f: Filters): Album[] {
   const words = normalize(f.query).split(/\s+/).filter(Boolean)
   return albums.filter((album) => {
-    if (album.inLibrary === f.removed) return false
+    // Un album masqué n'apparaît que sous « Masqués », qu'il soit ou non encore dans Spotify.
+    if (album.hidden !== f.hidden) return false
+    if (!f.hidden && album.inLibrary === f.removed) return false
     const tags = links.get(album.id) ?? NO_TAGS
     // « Sans tag » seul : aucun tag. Combiné à des tags : aucun tag en dehors de ceux demandés.
     if (f.untagged) {
@@ -23,7 +25,7 @@ export function filterAlbums(albums: Album[], links: Map<string, Set<number>>, f
 }
 
 export function hasActiveFilters(f: Filters): boolean {
-  return f.query.trim() !== '' || f.include.length > 0 || f.exclude.length > 0 || f.untagged || f.removed
+  return f.query.trim() !== '' || f.include.length > 0 || f.exclude.length > 0 || f.untagged || f.removed || f.hidden
 }
 
 /** Hash stable (FNV-1a) : l'ordre aléatoire reste le même tant que la graine ne change pas. */

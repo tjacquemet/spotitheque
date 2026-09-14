@@ -20,7 +20,7 @@ export interface SyncAlbum {
 
 /**
  * GET /api/library renvoie des tableaux compacts pour limiter la taille de la réponse.
- * Album : [id, name, artists, image, imageLarge, releaseDate, totalTracks, addedAt, inLibrary]
+ * Album : [id, name, artists, image, imageLarge, releaseDate, totalTracks, addedAt, inLibrary, lastPlayedAt, hidden]
  */
 export type AlbumRow = [
   id: string,
@@ -33,6 +33,7 @@ export type AlbumRow = [
   addedAt: string | null,
   inLibrary: 0 | 1,
   lastPlayedAt: string | null,
+  hidden: 0 | 1,
 ]
 export type TagRow = [id: number, name: string, color: string, isGenre: 0 | 1, isPinned: 0 | 1]
 

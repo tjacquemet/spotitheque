@@ -14,6 +14,8 @@ export interface Album {
   inLibrary: boolean
   /** Dernière écoute connue, relevée dans l'historique Spotify. */
   lastPlayedAt: string | null
+  /** Masqué dans Spotithèque, mais toujours dans la bibliothèque Spotify. */
+  hidden: boolean
   /** Titre + artistes normalisés, pour la recherche. */
   searchText: string
 }
@@ -47,6 +49,7 @@ export interface Filters {
   mode: 'and' | 'or'
   untagged: boolean
   removed: boolean
+  hidden: boolean
 }
 
-export const EMPTY_FILTERS: Filters = { query: '', include: [], exclude: [], mode: 'and', untagged: false, removed: false }
+export const EMPTY_FILTERS: Filters = { query: '', include: [], exclude: [], mode: 'and', untagged: false, removed: false, hidden: false }

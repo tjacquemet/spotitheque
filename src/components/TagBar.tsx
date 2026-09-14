@@ -12,6 +12,7 @@ interface TagBarProps {
   untaggedLabel: string
   untaggedCount: number
   removedCount: number
+  hiddenCount: number
   onToggle: (id: number) => void
   onToggleExclude: (id: number) => void
   setFilters: (update: (f: Filters) => Filters) => void
@@ -29,6 +30,7 @@ export function TagBar({
   untaggedLabel,
   untaggedCount,
   removedCount,
+  hiddenCount,
   onToggle,
   onToggleExclude,
   setFilters,
@@ -94,6 +96,14 @@ export function TagBar({
             count={removedCount}
             state={filters.removed ? 'on' : 'off'}
             onClick={() => setFilters((f) => ({ ...f, removed: !f.removed }))}
+          />
+        )}
+        {hiddenCount > 0 && (
+          <TagChip
+            label="Masqués"
+            count={hiddenCount}
+            state={filters.hidden ? 'on' : 'off'}
+            onClick={() => setFilters((f) => ({ ...f, hidden: !f.hidden }))}
           />
         )}
         {otherTags.length > 0 && <span className="tagbar-sep" />}

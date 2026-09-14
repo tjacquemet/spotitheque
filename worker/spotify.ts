@@ -9,6 +9,8 @@ const SPOTIFY_SCOPES = [
   'user-read-playback-state',
   'user-modify-playback-state',
   'user-read-recently-played',
+  // « Retirer de Spotify » depuis la fiche d'un album (DELETE /me/library).
+  'user-library-modify',
 ]
 
 export interface StoredTokens {

@@ -51,6 +51,7 @@ describe('isUnchanged', () => {
     year: 1959,
     inLibrary: true,
     lastPlayedAt: null,
+    hidden: false,
     searchText: 'kind of blue miles davis',
   }
 

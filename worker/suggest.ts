@@ -239,7 +239,7 @@ async function analyzeAlbums(env: Env, albums: EnrichedAlbum[]): Promise<{ sugge
 const PENDING_SQL = `
 SELECT mb.album_id AS id, mb.title, mb.artist, mb.year, mb.genres
 FROM album_lookup mb
-JOIN albums a ON a.id = mb.album_id AND a.in_library = 1
+JOIN albums a ON a.id = mb.album_id AND a.in_library = 1 AND a.hidden = 0
 WHERE mb.status = 'found' AND mb.lookup_version >= ?1
   AND NOT EXISTS (SELECT 1 FROM suggestions s WHERE s.album_id = mb.album_id AND s.source = 'ai')
 ORDER BY a.added_at DESC LIMIT ?2`
@@ -382,7 +382,7 @@ suggestRoutes.post('/suggestions/run', async (c) => {
 suggestRoutes.get('/suggestions', async (c) => {
   const { results } = await c.env.DB.prepare(
     `SELECT s.album_id AS albumId, s.label, s.tag_id AS tagId, s.source
-     FROM suggestions s JOIN albums a ON a.id = s.album_id
+     FROM suggestions s JOIN albums a ON a.id = s.album_id AND a.hidden = 0
      WHERE s.status = 'pending' AND s.label <> ''
      ORDER BY a.added_at DESC, s.source, s.label`,
   ).all<{ albumId: string; label: string; tagId: number | null; source: string }>()

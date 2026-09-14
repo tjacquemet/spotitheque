@@ -18,6 +18,7 @@ interface TagFilterPanelProps {
   /** « Sans tag » ou « Sans autre tag » selon qu'un tag est déjà sélectionné. */
   untaggedLabel: string
   removedCount: number
+  hiddenCount: number
   active: boolean
   onToggle: (id: number) => void
   onToggleExclude: (id: number) => void
@@ -33,6 +34,7 @@ export function TagFilterPanel({
   untaggedCount,
   untaggedLabel,
   removedCount,
+  hiddenCount,
   active,
   onToggle,
   onToggleExclude,
@@ -118,6 +120,19 @@ export function TagFilterPanel({
             >
               <span className="tag-row-name">Retirés de Spotify</span>
               <span className="tag-row-count">{removedCount}</span>
+            </button>
+          </li>
+        )}
+        {hiddenCount > 0 && (
+          <li className={`tag-row ${filters.hidden ? 'on' : 'off'}`}>
+            <button
+              type="button"
+              className="tag-row-main"
+              aria-pressed={filters.hidden}
+              onClick={() => setFilters((f) => ({ ...f, hidden: !f.hidden }))}
+            >
+              <span className="tag-row-name">Masqués</span>
+              <span className="tag-row-count">{hiddenCount}</span>
             </button>
           </li>
         )}

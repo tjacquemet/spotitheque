@@ -17,6 +17,7 @@ function album(id: string, name: string, artist: string, extra: Partial<Album> =
     addedAt: null,
     inLibrary: true,
     lastPlayedAt: null,
+    hidden: false,
     searchText: normalize(`${name} ${artist}`),
     ...extra,
   }
@@ -50,6 +51,27 @@ describe('filterAlbums', () => {
 
   it('montre uniquement les albums retirés avec le filtre dédié', () => {
     expect(ids(filterAlbums(albums, links, { ...EMPTY_FILTERS, removed: true }))).toEqual(['e'])
+  })
+
+  describe('albums masqués', () => {
+    const withHidden = [
+      ...albums,
+      album('h', 'Album masqué', 'Quelqu’un', { hidden: true }),
+      album('hr', 'Masqué et retiré', 'Quelqu’un', { hidden: true, inLibrary: false }),
+    ]
+
+    it('les écarte de la bibliothèque comme des retirés', () => {
+      expect(ids(filterAlbums(withHidden, links, EMPTY_FILTERS))).toEqual(['a', 'b', 'c', 'd'])
+      expect(ids(filterAlbums(withHidden, links, { ...EMPTY_FILTERS, removed: true }))).toEqual(['e'])
+    })
+
+    it('les montre tous sous « Masqués », encore dans Spotify ou non', () => {
+      expect(ids(filterAlbums(withHidden, links, { ...EMPTY_FILTERS, hidden: true }))).toEqual(['h', 'hr'])
+    })
+
+    it('compte le filtre comme actif', () => {
+      expect(hasActiveFilters({ ...EMPTY_FILTERS, hidden: true })).toBe(true)
+    })
   })
 
   it('filtre les albums sans tag', () => {

@@ -94,6 +94,9 @@ export const api = {
     request<MutationResult>('POST', '/album-tags', { albumIds, add, remove }),
   deleteAlbums: (albumIds: string[]) =>
     request<{ deleted: number; version: number }>('POST', '/albums/delete', { albumIds }),
+  hideAlbums: (albumIds: string[], hidden: boolean) => request<MutationResult>('POST', '/albums/hide', { albumIds, hidden }),
+  /** Retire l'album de la bibliothèque Spotify, puis le supprime de Spotithèque. */
+  removeFromSpotify: (albumId: string) => request<MutationResult>('POST', '/albums/remove-from-spotify', { albumId }),
 
   suggestions: () => request<{ items: SuggestionRow[] }>('GET', '/suggestions'),
   suggestPlan: (albumIds: string[]) => request<SuggestPlan>('POST', '/suggestions/plan', { albumIds }),

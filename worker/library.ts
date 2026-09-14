@@ -35,7 +35,7 @@ libraryRoutes.get('/spotify/token', async (c) => {
 // Chaque ligne est sérialisée en JSON par SQLite : le Worker ne fait que concaténer (limite de 10 ms de CPU).
 const LIBRARY_QUERIES = [
   "SELECT CAST(value AS INTEGER) AS j FROM settings WHERE key = 'data_version'",
-  `SELECT json_array(id, name, json(artists), image_url, image_url_large, release_date, total_tracks, added_at, in_library, last_played_at) AS j
+  `SELECT json_array(id, name, json(artists), image_url, image_url_large, release_date, total_tracks, added_at, in_library, last_played_at, hidden) AS j
    FROM albums`,
   'SELECT json_array(id, name, color, is_genre, is_pinned) AS j FROM tags ORDER BY name_key',
   'SELECT json_array(album_id, tag_id) AS j FROM album_tags',
@@ -156,12 +156,62 @@ libraryRoutes.post('/albums/delete', async (c) => {
          SELECT id FROM albums WHERE in_library = 0 AND id IN (SELECT value FROM json_each(?))
        )`,
     ).bind(ids),
-    db.prepare('DELETE FROM albums WHERE in_library = 0 AND id IN (SELECT value FROM json_each(?))').bind(ids),
+    // RETURNING plutôt que meta.changes : D1 y compte aussi les lignes effacées en cascade (fiches, propositions).
+    db.prepare('DELETE FROM albums WHERE in_library = 0 AND id IN (SELECT value FROM json_each(?)) RETURNING id').bind(ids),
     bumpVersionStmt(db),
   ])
-  const deleted = results[1].meta.changes ?? 0
+  const deleted = results[1].results.length
   await recordActivity(db, 'albums.supprimes', { demandes: albumIds.length, supprimes: deleted, albumIds: albumIds.slice(0, 20) })
   return c.json({ deleted, version: versionFrom(results) })
+})
+
+/**
+ * Masque ou réaffiche des albums. Un album masqué reste dans Spotify et garde ses tags ; seul Spotithèque
+ * cesse de l'afficher, hors du filtre « Masqués ». La synchro ne touche pas à ce drapeau.
+ */
+libraryRoutes.post('/albums/hide', async (c) => {
+  const body = asObject(await c.req.json())
+  const albumIds = parseList(body.albumIds, 5000, parseSpotifyId)
+  if (albumIds.length === 0) throw badRequest('Aucun album.')
+  if (typeof body.hidden !== 'boolean') throw badRequest('hidden doit être un booléen.')
+  const db = c.env.DB
+  const results = await db.batch([
+    db
+      .prepare('UPDATE albums SET hidden = ?1 WHERE hidden <> ?1 AND id IN (SELECT value FROM json_each(?2))')
+      .bind(body.hidden ? 1 : 0, JSON.stringify(albumIds)),
+    activityStmt(db, body.hidden ? 'albums.masques' : 'albums.reaffiches', { albumIds: albumIds.slice(0, 20) }),
+    bumpVersionStmt(db),
+  ])
+  return c.json<MutationResult>({ version: versionFrom(results) })
+})
+
+/**
+ * Retire un album de la bibliothèque Spotify, puis le supprime de Spotithèque avec ses tags.
+ * Spotify d'abord : s'il refuse, rien n'est effacé ici. Si c'est la base qui échoue ensuite,
+ * la prochaine synchro complète verra l'album retiré et il pourra être supprimé à la main.
+ */
+libraryRoutes.post('/albums/remove-from-spotify', async (c) => {
+  const albumId = parseSpotifyId(asObject(await c.req.json()).albumId)
+  const tokens = await getTokens(c.env)
+  if (tokens.scope && !tokens.scope.includes('user-library-modify')) {
+    throw new ApiError(403, 'spotify_scope', 'Spotify doit autoriser Spotithèque à modifier ta bibliothèque : reconnecte Spotify.')
+  }
+  const uri = encodeURIComponent(`spotify:album:${albumId}`)
+  const res = await spotifyFetch(c.env, `/me/library?uris=${uri}`, { method: 'DELETE' }, tokens.accessToken)
+  if (res.status === 403) {
+    throw new ApiError(403, 'spotify_scope', 'Spotify doit autoriser Spotithèque à modifier ta bibliothèque : reconnecte Spotify.')
+  }
+  if (!res.ok) throw await spotifyError(res)
+
+  const db = c.env.DB
+  const results = await db.batch([
+    db.prepare('DELETE FROM album_tags WHERE album_id = ?').bind(albumId),
+    db.prepare('DELETE FROM albums WHERE id = ? RETURNING name').bind(albumId),
+    bumpVersionStmt(db),
+  ])
+  const name = (results[1].results[0] as { name: string } | undefined)?.name ?? null
+  await recordActivity(db, 'album.retire_de_spotify', { albumId, nom: name })
+  return c.json<MutationResult>({ version: versionFrom(results) })
 })
 
 /** Couleur la moins utilisée de la palette, pour varier les nouveaux tags. */

@@ -1,12 +1,14 @@
+import { useState } from 'react'
 import type { SpotifyStatus } from '../../shared/api'
+import { ApiError } from '../api'
 import { type AlbumPlayback, useAlbumPlayback } from '../hooks/useAlbumPlayback'
 import { isPhone, spotifyAlbumUrl } from '../lib/device'
 import { formatDate, plural } from '../lib/text'
 import type { Album, Tag } from '../lib/types'
-import { applyTags, deleteAlbums, useLibrary } from '../store'
+import { applyTags, deleteAlbums, removeFromSpotify, setAlbumsHidden, useLibrary } from '../store'
 import { toast, toastError } from '../toast'
 import { AlbumCover } from './AlbumCover'
-import { DiceIcon, ExternalIcon, PlayIcon, SpeakerIcon, TrashIcon } from './Icons'
+import { DiceIcon, ExternalIcon, EyeIcon, EyeOffIcon, PlayIcon, SpeakerIcon, TrashIcon } from './Icons'
 import { Sheet } from './Sheet'
 import { TagChip } from './TagChip'
 import { TagPicker } from './TagPicker'
@@ -94,6 +96,47 @@ export function AlbumSheet({ album, spotify, onClose, onAnother }: AlbumSheetPro
     onClose()
   }
 
+  // Masquer fait disparaître l'album de la grille : on referme la fiche, l'annulation reste à portée.
+  const hide = () => {
+    setAlbumsHidden([album.id], true).catch(toastError)
+    toast(`« ${album.name} » masqué`, {
+      action: { label: 'Annuler', run: () => void setAlbumsHidden([album.id], false).catch(toastError) },
+    })
+    onClose()
+  }
+
+  const unhide = () => {
+    setAlbumsHidden([album.id], false).catch(toastError)
+    toast(`« ${album.name} » de nouveau affiché`)
+  }
+
+  const [removing, setRemoving] = useState(false)
+  const removeSpotify = () => {
+    const ok = window.confirm(
+      `Retirer « ${album.name} » de ta bibliothèque Spotify ? Il sera aussi supprimé de Spotithèque, avec ses tags. Tu pourras le resauvegarder dans Spotify, mais ses tags seront perdus.`,
+    )
+    if (!ok) return
+    setRemoving(true)
+    removeFromSpotify(album.id)
+      .then(() => {
+        toast(`« ${album.name} » retiré de Spotify`)
+        onClose()
+      })
+      .catch((err) => {
+        setRemoving(false)
+        if (err instanceof ApiError && err.code === 'spotify_scope') {
+          // Autorisation ajoutée après la connexion initiale : un passage par Spotify suffit.
+          toast(err.message, {
+            tone: 'error',
+            duration: 12_000,
+            action: { label: 'Autoriser', run: () => window.location.assign('/api/auth/login') },
+          })
+        } else {
+          toastError(err)
+        }
+      })
+  }
+
   return (
     <Sheet onClose={onClose} label={album.name}>
       <div className="album-head">
@@ -107,6 +150,7 @@ export function AlbumSheet({ album, spotify, onClose, onAnother }: AlbumSheetPro
           {added && <p className="album-meta">Ajouté le {added}</p>}
           {played && <p className="album-meta">Écouté le {played}</p>}
           {!album.inLibrary && <p className="album-meta warn">Retiré de ta bibliothèque Spotify</p>}
+          {album.hidden && <p className="album-meta warn">Masqué dans Spotithèque</p>}
         </div>
       </div>
 
@@ -155,11 +199,29 @@ export function AlbumSheet({ album, spotify, onClose, onAnother }: AlbumSheetPro
         />
       )}
 
-      {!album.inLibrary && (
-        <button type="button" className="btn btn-danger btn-block danger-zone" onClick={remove}>
-          <TrashIcon size={18} /> Supprimer de Spotithèque
-        </button>
-      )}
+      <div className="album-actions danger-zone">
+        {/* Masquer n'a de sens que pour un album encore affiché dans la bibliothèque, ou déjà masqué. */}
+        {album.hidden ? (
+          <button type="button" className="btn btn-block" onClick={unhide}>
+            <EyeIcon size={18} /> Réafficher dans Spotithèque
+          </button>
+        ) : (
+          album.inLibrary && (
+            <button type="button" className="btn btn-block" onClick={hide}>
+              <EyeOffIcon size={18} /> Masquer dans Spotithèque
+            </button>
+          )
+        )}
+        {album.inLibrary ? (
+          <button type="button" className="btn btn-danger btn-block" onClick={removeSpotify} disabled={removing}>
+            <TrashIcon size={18} /> {removing ? 'Retrait en cours…' : 'Retirer de Spotify'}
+          </button>
+        ) : (
+          <button type="button" className="btn btn-danger btn-block" onClick={remove}>
+            <TrashIcon size={18} /> Supprimer de Spotithèque
+          </button>
+        )}
+      </div>
     </Sheet>
   )
 }
