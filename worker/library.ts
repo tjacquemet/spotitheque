@@ -5,6 +5,7 @@ import { activityStmt, recordActivity } from './activity'
 import { bumpVersionStmt, getSetting, nowIso, setSettingStmt, versionFrom } from './db'
 import { ApiError, badRequest } from './errors'
 import { collectRecentPlays } from './plays'
+import { confirmRemoval } from './removal'
 import { getTokens, spotifyError, spotifyFetch } from './spotify'
 import type { AppEnv } from './types'
 import { asObject, parseColor, parseList, parseSpotifyId, parseSyncAlbum, parseTagId, parseTagName } from './validate'
@@ -187,8 +188,9 @@ libraryRoutes.post('/albums/hide', async (c) => {
 
 /**
  * Retire un album de la bibliothèque Spotify, puis le supprime de Spotithèque avec ses tags.
- * Spotify d'abord : s'il refuse, rien n'est effacé ici. Si c'est la base qui échoue ensuite,
- * la prochaine synchro complète verra l'album retiré et il pourra être supprimé à la main.
+ * Spotify d'abord, et sa réponse ne suffit pas : l'album n'est effacé ici qu'une fois la relecture de la
+ * bibliothèque confirmant son départ. Si c'est la base qui échoue ensuite, la prochaine synchro complète
+ * verra l'album retiré et il pourra être supprimé à la main.
  */
 libraryRoutes.post('/albums/remove-from-spotify', async (c) => {
   const albumId = parseSpotifyId(asObject(await c.req.json()).albumId)
@@ -203,14 +205,32 @@ libraryRoutes.post('/albums/remove-from-spotify', async (c) => {
   }
   if (!res.ok) throw await spotifyError(res)
 
+  // Le 200 de Spotify ne prouve rien : on relit la bibliothèque, et rien n'est effacé ici sans confirmation.
   const db = c.env.DB
+  const check = await confirmRemoval(async () => {
+    const answer = await spotifyFetch(c.env, `/me/library/contains?uris=${uri}`, {}, tokens.accessToken).catch(() => null)
+    if (!answer?.ok) return null
+    const [saved] = await answer.json<boolean[]>().catch(() => [null])
+    return typeof saved === 'boolean' ? saved : null
+  })
+  if (check !== 'removed') {
+    await recordActivity(db, 'album.retrait_non_confirme', { albumId, reponseSpotify: res.status, verification: check })
+    throw new ApiError(
+      409,
+      'spotify_not_removed',
+      check === 'still-saved'
+        ? "Spotify a accepté la demande, mais l'album est toujours dans ta bibliothèque. Rien n'a été supprimé : réessaie dans un instant."
+        : "Impossible de vérifier auprès de Spotify que l'album a bien été retiré. Rien n'a été supprimé : réessaie dans un instant.",
+    )
+  }
+
   const results = await db.batch([
     db.prepare('DELETE FROM album_tags WHERE album_id = ?').bind(albumId),
     db.prepare('DELETE FROM albums WHERE id = ? RETURNING name').bind(albumId),
     bumpVersionStmt(db),
   ])
   const name = (results[1].results[0] as { name: string } | undefined)?.name ?? null
-  await recordActivity(db, 'album.retire_de_spotify', { albumId, nom: name })
+  await recordActivity(db, 'album.retire_de_spotify', { albumId, nom: name, verifie: true })
   return c.json<MutationResult>({ version: versionFrom(results) })
 })
 
