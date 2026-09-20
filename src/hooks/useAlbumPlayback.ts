@@ -71,9 +71,17 @@ export function useAlbumPlayback(albumId: string, spotify: SpotifyStatus | null)
       if (result.status === 'queued') {
         const reste = result.queued < result.total ? ` (sur ${result.total})` : ''
         toast(`${plural(result.queued, 'titre ajouté', 'titres ajoutés')} à la file sur ${result.device.name}${reste}`)
+      } else if (result.status === 'playing') {
+        toast(`Rien ne jouait : lecture lancée sur ${result.device.name}`)
+      } else if (result.status === 'no_device' && isPhone) {
+        // Spotify est fermé sur le téléphone : on l'ouvre dans le même geste, la lecture suivra.
+        toast('Ouverture de Spotify…')
+        openSpotify()
       } else if (result.status === 'no_playback') {
-        // La file de Spotify n'existe qu'au sein d'une lecture en cours.
-        toast("Rien ne joue en ce moment : lance un morceau, puis ajoute l'album à la file.", { tone: 'error', duration: 8000 })
+        toast("Spotify n'a pas pu lancer la lecture sur cet appareil : ouvre Spotify, puis réessaie.", {
+          tone: 'error',
+          duration: 8000,
+        })
       } else {
         toast(NO_DEVICE_MESSAGE, { tone: 'error' })
       }

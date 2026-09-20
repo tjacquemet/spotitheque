@@ -116,11 +116,14 @@ export type ClientKind = 'phone' | 'desktop'
 export type PlayResult = { status: 'playing'; device: Device } | { status: 'no_device' }
 
 /**
- * Ajout à la file de lecture. `no_playback` : un appareil répond, mais rien ne joue — la file de
- * Spotify n'existe qu'au sein d'une lecture en cours.
+ * Ajout à la file de lecture.
+ * `playing` : rien ne jouait, l'album a été lancé sur l'appareil visé — la file de Spotify n'existe
+ * qu'au sein d'une lecture en cours, et lancer l'album donne le même résultat à l'oreille.
+ * `no_playback` : ni file ni lecture possibles sur cet appareil.
  */
 export type QueueResult =
   | { status: 'queued'; device: Device; queued: number; total: number }
+  | { status: 'playing'; device: Device }
   | { status: 'no_device' }
   | { status: 'no_playback' }
 

@@ -7,10 +7,19 @@ const collator = new Intl.Collator('fr', { sensitivity: 'base', numeric: true })
 export const compareText = (a: string, b: string) => collator.compare(a, b)
 
 const dateFormat = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
-export function formatDate(iso: string | null): string | null {
+/**
+ * Date relative à aujourd'hui, prête à suivre un verbe : « aujourd'hui », « hier », ou « le 12 septembre ».
+ * L'article fait partie du texte — « synchronisé le aujourd'hui » ne se dit pas.
+ */
+export function formatDayPhrase(iso: string | null, now = new Date()): string | null {
   if (!iso) return null
-  const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? null : dateFormat.format(d)
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return null
+  const midnight = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+  const days = Math.round((midnight(now) - midnight(date)) / 86_400_000)
+  if (days === 0) return "aujourd'hui"
+  if (days === 1) return 'hier'
+  return `le ${dateFormat.format(date)}`
 }
 
 export function plural(n: number, one: string, many: string): string {

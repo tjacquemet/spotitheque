@@ -1,7 +1,7 @@
 import { useRef, useState, type ChangeEvent } from 'react'
 import type { MeResponse } from '../../shared/api'
 import { api } from '../api'
-import { formatDate, plural } from '../lib/text'
+import { formatDayPhrase, plural } from '../lib/text'
 import { importBackup, runSync, useLibrary } from '../store'
 import { toast, toastError } from '../toast'
 import { BackIcon, SyncIcon } from './Icons'
@@ -42,7 +42,7 @@ export function SettingsScreen({ me, onBack, onSynced, onLogout }: Props) {
   const fileInput = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const inLibrary = data?.albums.filter((a) => a.inLibrary).length ?? 0
-  const lastFull = formatDate(me?.lastFullSync ?? null)
+  const lastFull = formatDayPhrase(me?.lastFullSync ?? null)
   const connected = me?.spotify === 'connected'
 
   const doSync = async (full: boolean) => {
@@ -107,7 +107,7 @@ export function SettingsScreen({ me, onBack, onSynced, onLogout }: Props) {
           <h2 className="panel-title">Bibliothèque</h2>
           <p>
             {plural(inLibrary, 'album', 'albums')} · {plural(data?.tags.length ?? 0, 'tag', 'tags')}
-            {lastFull && <span className="muted"> · dernière synchro complète le {lastFull}</span>}
+            {lastFull && <span className="muted"> · dernière synchro complète {lastFull}</span>}
           </p>
           {sync && (
             <div className="progress" aria-hidden="true">

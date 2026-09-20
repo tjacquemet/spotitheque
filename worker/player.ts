@@ -99,8 +99,15 @@ playerRoutes.post('/queue', async (c) => {
       queued++
       continue
     }
-    // 404 sur le premier titre : l'appareil est visible mais aucune lecture n'est en cours.
-    if (res.status === 404 && queued === 0) return c.json<QueueResult>({ status: 'no_playback' })
+    // 404 sur le premier titre : l'appareil est visible mais aucune lecture n'est en cours, donc aucune
+    // file où empiler. Lancer l'album revient au même pour l'auditeur, et la suite s'enchaîne d'elle-même.
+    if (res.status === 404 && queued === 0) {
+      if (await startAlbum(c.env, accessToken, albumId, target.id)) {
+        await recordActivity(c.env.DB, 'file_attente.lecture_lancee', { albumId, appareil: target.name })
+        return c.json<QueueResult>({ status: 'playing', device: target })
+      }
+      return c.json<QueueResult>({ status: 'no_playback' })
+    }
     if (queued === 0) throw await spotifyError(res)
     break
   }

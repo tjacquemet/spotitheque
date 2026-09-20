@@ -4,7 +4,7 @@ import { ApiError } from '../api'
 import { type AlbumPlayback, useAlbumPlayback } from '../hooks/useAlbumPlayback'
 import { useAlbumTracks } from '../hooks/useAlbumTracks'
 import { isPhone, spotifyAlbumUrl } from '../lib/device'
-import { formatDate, formatTotalDuration, plural } from '../lib/text'
+import { formatDayPhrase, formatTotalDuration, plural } from '../lib/text'
 import type { Album, Tag } from '../lib/types'
 import { applyTags, deleteAlbums, removeFromSpotify, setAlbumsHidden, useLibrary } from '../store'
 import { toast, toastError } from '../toast'
@@ -79,8 +79,8 @@ export function AlbumSheet({ album, spotify, onClose, onAnother }: AlbumSheetPro
   // Les tags posés d'un côté, ceux qui restent à poser de l'autre : la liste des tags est déjà classée.
   const assigned = data?.tags.filter((t) => albumTags.has(t.id)) ?? []
   const available = data?.tags.filter((t) => !albumTags.has(t.id)) ?? []
-  const added = formatDate(album.addedAt)
-  const played = formatDate(album.lastPlayedAt)
+  const added = formatDayPhrase(album.addedAt)
+  const played = formatDayPhrase(album.lastPlayedAt)
   // La durée n'apparaît qu'une fois les titres arrivés : elle se calcule à partir d'eux.
   const totalMs = tracks?.reduce((sum, [, , , durationMs]) => sum + durationMs, 0) ?? 0
   const meta = [
@@ -157,8 +157,8 @@ export function AlbumSheet({ album, spotify, onClose, onAnother }: AlbumSheetPro
           <h2 className="album-title">{album.name}</h2>
           <p className="album-artist">{album.artistNames}</p>
           {meta && <p className="album-meta">{meta}</p>}
-          {added && <p className="album-meta">Ajouté le {added}</p>}
-          {played && <p className="album-meta">Écouté le {played}</p>}
+          {added && <p className="album-meta">Ajouté {added}</p>}
+          {played && <p className="album-meta">Écouté {played}</p>}
           {!album.inLibrary && <p className="album-meta warn">Retiré de ta bibliothèque Spotify</p>}
           {album.hidden && <p className="album-meta warn">Masqué dans Spotithèque</p>}
         </div>
