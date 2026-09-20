@@ -67,12 +67,27 @@ export function useAlbumPlayback(albumId: string, spotify: SpotifyStatus | null)
     }
     setBusy(true)
     try {
-      const result = await api.queueAlbum(albumId, choice, clientKind)
-      if (result.status === 'queued') {
-        const reste = result.queued < result.total ? ` (sur ${result.total})` : ''
-        toast(`${plural(result.queued, 'titre ajouté', 'titres ajoutés')} à la file sur ${result.device.name}${reste}`)
-      } else if (result.status === 'playing') {
-        toast(`Rien ne jouait : lecture lancée sur ${result.device.name}`)
+      // Un appel par lot de titres : le Worker est borné en sous-requêtes, pas les coffrets.
+      let from = 0
+      let added = 0
+      let started = false
+      let result = await api.queueAlbum(albumId, choice, clientKind, from)
+      while ((result.status === 'queued' || result.status === 'started') && result.queued > 0) {
+        added += result.queued
+        started ||= result.status === 'started'
+        from = result.from + result.queued
+        if (from >= result.total) break
+        result = await api.queueAlbum(albumId, choice, clientKind, from)
+      }
+
+      if (result.status === 'queued' || result.status === 'started') {
+        const appareil = `sur ${result.device.name}`
+        const suite = added > 1 ? ` · ${plural(added - 1, 'titre à la suite', 'titres à la suite')}` : ''
+        toast(
+          started
+            ? `Lecture lancée ${appareil}${suite}`
+            : `${plural(added, 'titre ajouté', 'titres ajoutés')} à la file ${appareil}`,
+        )
       } else if (result.status === 'no_device' && isPhone) {
         // Spotify est fermé sur le téléphone : on l'ouvre dans le même geste, la lecture suivra.
         toast('Ouverture de Spotify…')

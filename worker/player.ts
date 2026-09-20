@@ -70,18 +70,39 @@ playerRoutes.post('/play', async (c) => {
 })
 
 /**
- * Titres empilés au plus dans la file. La file de Spotify n'accepte que des titres, un par requête :
- * ce plafond garde l'exécution sous la limite de 50 sous-requêtes du plan gratuit.
+ * Titres empilés par appel. La file de Spotify n'accepte qu'un titre par requête : ce plafond garde
+ * l'exécution sous la limite de 50 sous-requêtes du plan gratuit. L'interface rappelle la route avec
+ * `from` tant qu'il reste des titres, ce qui permet de servir même un coffret.
  */
 const MAX_QUEUED = 40
+/** Le temps que l'appareil soit reconnu actif après le lancement du premier titre. */
+const WAKE_MS = 500
+
+/** Lance un titre seul : pas de contexte d'album, la suite tiendra dans la file. */
+async function startTrack(env: Env, token: string, trackId: string, deviceId: string): Promise<boolean> {
+  const device = encodeURIComponent(deviceId)
+  const res = await spotifyFetch(
+    env,
+    `/me/player/play?device_id=${device}`,
+    { method: 'PUT', body: { uris: [`spotify:track:${trackId}`] } },
+    token,
+  )
+  if (res.status === 404) return false
+  if (!res.ok) throw await spotifyError(res)
+  // Lecture dans l'ordre : l'aléatoire est coupé au démarrage (erreur sans conséquence ignorée).
+  await spotifyFetch(env, `/me/player/shuffle?state=false&device_id=${device}`, { method: 'PUT' }, token).catch(() => null)
+  return true
+}
 
 /**
- * Ajoute l'album à la file de lecture, titre par titre et dans l'ordre. Rien ne joue ? La file de
- * Spotify n'existe pas : on le dit plutôt que de faire croire à un ajout.
+ * Ajoute l'album à la file de lecture, titre par titre et dans l'ordre — y compris quand rien ne joue :
+ * le premier titre est alors lancé seul et les suivants s'empilent derrière lui. Tout passe ainsi par la
+ * file, si bien qu'un album ajouté plus tard se range à la suite au lieu de s'insérer dans celui en cours.
  */
 playerRoutes.post('/queue', async (c) => {
   const body = asObject(await c.req.json())
   const albumId = parseSpotifyId(body.albumId)
+  const from = parseTrackPosition(body.from)
   const deviceId = body.deviceId === undefined || body.deviceId === null ? null : String(body.deviceId)
   if (deviceId !== null && (deviceId.length === 0 || deviceId.length > 100)) throw badRequest('Appareil invalide.')
   const { accessToken } = await getTokens(c.env)
@@ -92,28 +113,38 @@ playerRoutes.post('/queue', async (c) => {
   const tracks = (await fetchAlbumTracks(c.env, accessToken, albumId)).filter((t) => t.id)
   const device = encodeURIComponent(target.id)
   let queued = 0
-  for (const track of tracks.slice(0, MAX_QUEUED)) {
+  let started = false
+  for (const track of tracks.slice(from, from + MAX_QUEUED)) {
     const uri = encodeURIComponent(`spotify:track:${track.id}`)
     const res = await spotifyFetch(c.env, `/me/player/queue?uri=${uri}&device_id=${device}`, { method: 'POST' }, accessToken)
     if (res.ok) {
       queued++
       continue
     }
-    // 404 sur le premier titre : l'appareil est visible mais aucune lecture n'est en cours, donc aucune
-    // file où empiler. Lancer l'album revient au même pour l'auditeur, et la suite s'enchaîne d'elle-même.
-    if (res.status === 404 && queued === 0) {
-      if (await startAlbum(c.env, accessToken, albumId, target.id)) {
-        await recordActivity(c.env.DB, 'file_attente.lecture_lancee', { albumId, appareil: target.name })
-        return c.json<QueueResult>({ status: 'playing', device: target })
+    // 404 sur le tout premier titre : l'appareil est éveillé mais silencieux, il n'existe donc pas encore
+    // de file. On lance ce titre seul, et les suivants reprennent leur place derrière lui.
+    if (res.status === 404 && queued === 0 && from === 0) {
+      if (!(await startTrack(c.env, accessToken, track.id as string, target.id))) {
+        return c.json<QueueResult>({ status: 'no_playback' })
       }
-      return c.json<QueueResult>({ status: 'no_playback' })
+      started = true
+      queued++
+      await new Promise((resolve) => setTimeout(resolve, WAKE_MS))
+      continue
     }
     if (queued === 0) throw await spotifyError(res)
     break
   }
 
-  await recordActivity(c.env.DB, 'file_attente', { albumId, appareil: target.name, titres: queued, total: tracks.length })
-  return c.json<QueueResult>({ status: 'queued', device: target, queued, total: tracks.length })
+  await recordActivity(c.env.DB, 'file_attente', {
+    albumId,
+    appareil: target.name,
+    titres: queued,
+    depuis: from,
+    total: tracks.length,
+    lecture: started,
+  })
+  return c.json<QueueResult>({ status: started ? 'started' : 'queued', device: target, queued, from, total: tracks.length })
 })
 
 const WAIT_WINDOW_MS = 25_000
