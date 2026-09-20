@@ -3,6 +3,7 @@ import type { Device, SpotifyStatus } from '../../shared/api'
 import { pickDevice } from '../../shared/devices'
 import { api } from '../api'
 import { clientKind, isPhone, spotifyAlbumUrl } from '../lib/device'
+import { plural } from '../lib/text'
 import { toast, toastError } from '../toast'
 
 export const NO_DEVICE_MESSAGE = 'Aucun appareil Spotify disponible : ouvre Spotify sur un appareil, puis réessaie.'
@@ -15,6 +16,8 @@ export interface AlbumPlayback {
   choice: string | null
   setChoice: (id: string | null) => void
   busy: boolean
+  /** Empile l'album dans la file de lecture de Spotify, sans interrompre ce qui joue. */
+  queue: () => Promise<void>
   /** Spotify était fermé : il reste à l'ouvrir à la main. */
   mustOpen: boolean
   play: (trackPosition?: number) => Promise<void>
@@ -57,6 +60,30 @@ export function useAlbumPlayback(albumId: string, spotify: SpotifyStatus | null)
     window.location.href = spotifyAlbumUrl(albumId)
   }
 
+  const queue = async () => {
+    if (!connected) {
+      toast('Connecte Spotify pour utiliser la file de lecture.', { tone: 'error' })
+      return
+    }
+    setBusy(true)
+    try {
+      const result = await api.queueAlbum(albumId, choice, clientKind)
+      if (result.status === 'queued') {
+        const reste = result.queued < result.total ? ` (sur ${result.total})` : ''
+        toast(`${plural(result.queued, 'titre ajouté', 'titres ajoutés')} à la file sur ${result.device.name}${reste}`)
+      } else if (result.status === 'no_playback') {
+        // La file de Spotify n'existe qu'au sein d'une lecture en cours.
+        toast("Rien ne joue en ce moment : lance un morceau, puis ajoute l'album à la file.", { tone: 'error', duration: 8000 })
+      } else {
+        toast(NO_DEVICE_MESSAGE, { tone: 'error' })
+      }
+    } catch (err) {
+      toastError(err)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const play = async (trackPosition = 0) => {
     setMustOpen(false)
     if (!connected) {
@@ -86,5 +113,5 @@ export function useAlbumPlayback(albumId: string, spotify: SpotifyStatus | null)
     }
   }
 
-  return { connected, devices, target, choice, setChoice, busy, mustOpen, play, openSpotify }
+  return { connected, devices, target, choice, setChoice, busy, mustOpen, play, queue, openSpotify }
 }

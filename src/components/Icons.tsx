@@ -123,6 +123,13 @@ export const SparkleIcon = (p: IconProps) => (
   </Icon>
 )
 
+export const QueueIcon = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M3 6h13M3 12h9M3 18h9" />
+    <path d="M17 13v8M13 17h8" />
+  </Icon>
+)
+
 export const EyeIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />

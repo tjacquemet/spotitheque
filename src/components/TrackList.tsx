@@ -1,39 +1,20 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment } from 'react'
 import type { SpotifyStatus, TrackRow } from '../../shared/api'
-import { api } from '../api'
 import { formatDuration } from '../lib/text'
 import { PlayIcon } from './Icons'
 
 interface TrackListProps {
-  albumId: string
+  /** null tant que les titres ne sont pas arrivés. */
+  tracks: TrackRow[] | null
+  failed: boolean
   spotify: SpotifyStatus | null
   /** Artistes de l'album : ceux d'un morceau ne sont affichés que s'ils en diffèrent (compilations). */
   albumArtists: string
   onPlay: (trackPosition: number) => void
 }
 
-/**
- * Titres de l'album, demandés à Spotify à l'ouverture de la fiche et gardés le temps de la session.
- * Rien n'est conservé hors ligne : les tags portent sur les albums, pas sur les morceaux.
- */
-export function TrackList({ albumId, spotify, albumArtists, onPlay }: TrackListProps) {
-  const [tracks, setTracks] = useState<TrackRow[] | null>(null)
-  const [failed, setFailed] = useState(false)
-
-  useEffect(() => {
-    if (spotify !== 'connected') return
-    let alive = true
-    setTracks(null)
-    setFailed(false)
-    api
-      .albumTracks(albumId)
-      .then((r) => alive && setTracks(r.tracks))
-      .catch(() => alive && setFailed(true))
-    return () => {
-      alive = false
-    }
-  }, [albumId, spotify])
-
+/** Titres de l'album. Rien n'est conservé hors ligne : les tags portent sur les albums, pas sur les morceaux. */
+export function TrackList({ tracks, failed, spotify, albumArtists, onPlay }: TrackListProps) {
   if (spotify !== 'connected') {
     return <p className="hint">Les titres demandent une connexion à Spotify.</p>
   }

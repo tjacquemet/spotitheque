@@ -1,9 +1,10 @@
 import { Hono } from 'hono'
-import type { ClientKind, Device, PlayResult } from '../shared/api'
+import type { ClientKind, Device, PlayResult, QueueResult } from '../shared/api'
 import { pickDevice } from '../shared/devices'
 import { recordActivity } from './activity'
 import { badRequest } from './errors'
 import { getTokens, spotifyError, spotifyFetch } from './spotify'
+import { fetchAlbumTracks } from './tracks'
 import type { AppEnv } from './types'
 import { asObject, parseSpotifyId, parseTrackPosition } from './validate'
 
@@ -66,6 +67,46 @@ playerRoutes.post('/play', async (c) => {
   }
   await recordActivity(c.env.DB, 'lecture', { albumId, appareil: target.name, piste: position + 1 })
   return c.json<PlayResult>({ status: 'playing', device: target })
+})
+
+/**
+ * Titres empilés au plus dans la file. La file de Spotify n'accepte que des titres, un par requête :
+ * ce plafond garde l'exécution sous la limite de 50 sous-requêtes du plan gratuit.
+ */
+const MAX_QUEUED = 40
+
+/**
+ * Ajoute l'album à la file de lecture, titre par titre et dans l'ordre. Rien ne joue ? La file de
+ * Spotify n'existe pas : on le dit plutôt que de faire croire à un ajout.
+ */
+playerRoutes.post('/queue', async (c) => {
+  const body = asObject(await c.req.json())
+  const albumId = parseSpotifyId(body.albumId)
+  const deviceId = body.deviceId === undefined || body.deviceId === null ? null : String(body.deviceId)
+  if (deviceId !== null && (deviceId.length === 0 || deviceId.length > 100)) throw badRequest('Appareil invalide.')
+  const { accessToken } = await getTokens(c.env)
+  const devices = await listDevices(c.env, accessToken)
+  const target = pickDevice(devices, { deviceId, clientKind: parseClientKind(body.clientKind) })
+  if (!target) return c.json<QueueResult>({ status: 'no_device' })
+
+  const tracks = (await fetchAlbumTracks(c.env, accessToken, albumId)).filter((t) => t.id)
+  const device = encodeURIComponent(target.id)
+  let queued = 0
+  for (const track of tracks.slice(0, MAX_QUEUED)) {
+    const uri = encodeURIComponent(`spotify:track:${track.id}`)
+    const res = await spotifyFetch(c.env, `/me/player/queue?uri=${uri}&device_id=${device}`, { method: 'POST' }, accessToken)
+    if (res.ok) {
+      queued++
+      continue
+    }
+    // 404 sur le premier titre : l'appareil est visible mais aucune lecture n'est en cours.
+    if (res.status === 404 && queued === 0) return c.json<QueueResult>({ status: 'no_playback' })
+    if (queued === 0) throw await spotifyError(res)
+    break
+  }
+
+  await recordActivity(c.env.DB, 'file_attente', { albumId, appareil: target.name, titres: queued, total: tracks.length })
+  return c.json<QueueResult>({ status: 'queued', device: target, queued, total: tracks.length })
 })
 
 const WAIT_WINDOW_MS = 25_000

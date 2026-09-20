@@ -2,13 +2,14 @@ import { useState } from 'react'
 import type { SpotifyStatus } from '../../shared/api'
 import { ApiError } from '../api'
 import { type AlbumPlayback, useAlbumPlayback } from '../hooks/useAlbumPlayback'
+import { useAlbumTracks } from '../hooks/useAlbumTracks'
 import { isPhone, spotifyAlbumUrl } from '../lib/device'
-import { formatDate, plural } from '../lib/text'
+import { formatDate, formatTotalDuration, plural } from '../lib/text'
 import type { Album, Tag } from '../lib/types'
 import { applyTags, deleteAlbums, removeFromSpotify, setAlbumsHidden, useLibrary } from '../store'
 import { toast, toastError } from '../toast'
 import { AlbumCover } from './AlbumCover'
-import { DiceIcon, ExternalIcon, EyeIcon, EyeOffIcon, PlayIcon, SpeakerIcon, TrashIcon } from './Icons'
+import { DiceIcon, ExternalIcon, EyeIcon, EyeOffIcon, QueueIcon, SpeakerIcon, TrashIcon } from './Icons'
 import { Sheet } from './Sheet'
 import { TagChip } from './TagChip'
 import { TagPicker } from './TagPicker'
@@ -17,7 +18,7 @@ import { TrackList } from './TrackList'
 const EMPTY = new Set<number>()
 
 function PlayControls({ album, playback }: { album: Album; playback: AlbumPlayback }) {
-  const { connected, devices, target, choice, setChoice, busy, mustOpen, play, openSpotify } = playback
+  const { connected, devices, target, choice, setChoice, busy, mustOpen, queue, openSpotify } = playback
 
   return (
     <div className="play-block">
@@ -26,8 +27,8 @@ function PlayControls({ album, playback }: { album: Album; playback: AlbumPlayba
           <ExternalIcon /> Ouvrir Spotify pour écouter
         </button>
       ) : (
-        <button type="button" className="btn btn-primary btn-block btn-lg" onClick={() => void play()} disabled={busy}>
-          <PlayIcon /> {busy ? 'Lancement…' : 'Écouter'}
+        <button type="button" className="btn btn-primary btn-block btn-lg" onClick={() => void queue()} disabled={busy}>
+          <QueueIcon /> {busy ? 'Ajout…' : 'Ajouter à la file'}
         </button>
       )}
       {connected && (
@@ -73,13 +74,22 @@ interface AlbumSheetProps {
 export function AlbumSheet({ album, spotify, onClose, onAnother }: AlbumSheetProps) {
   const data = useLibrary((s) => s.data)
   const playback = useAlbumPlayback(album.id, spotify)
+  const { tracks, failed: tracksFailed } = useAlbumTracks(album.id, spotify)
   const albumTags = data?.links.get(album.id) ?? EMPTY
   // Les tags posés d'un côté, ceux qui restent à poser de l'autre : la liste des tags est déjà classée.
   const assigned = data?.tags.filter((t) => albumTags.has(t.id)) ?? []
   const available = data?.tags.filter((t) => !albumTags.has(t.id)) ?? []
   const added = formatDate(album.addedAt)
   const played = formatDate(album.lastPlayedAt)
-  const meta = [album.year, album.totalTracks ? plural(album.totalTracks, 'titre', 'titres') : null].filter(Boolean).join(' · ')
+  // La durée n'apparaît qu'une fois les titres arrivés : elle se calcule à partir d'eux.
+  const totalMs = tracks?.reduce((sum, [, , , durationMs]) => sum + durationMs, 0) ?? 0
+  const meta = [
+    album.year,
+    album.totalTracks ? plural(album.totalTracks, 'titre', 'titres') : null,
+    totalMs > 0 ? formatTotalDuration(totalMs) : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
 
   const toggle = (tag: Tag) => {
     const has = albumTags.has(tag.id)
@@ -182,7 +192,8 @@ export function AlbumSheet({ album, spotify, onClose, onAnother }: AlbumSheetPro
 
       <h3 className="section-title">Titres</h3>
       <TrackList
-        albumId={album.id}
+        tracks={tracks}
+        failed={tracksFailed}
         spotify={spotify}
         albumArtists={album.artistNames}
         onPlay={(position) => void playback.play(position)}

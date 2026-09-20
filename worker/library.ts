@@ -7,6 +7,7 @@ import { ApiError, badRequest } from './errors'
 import { collectRecentPlays } from './plays'
 import { confirmRemoval } from './removal'
 import { getTokens, spotifyError, spotifyFetch } from './spotify'
+import { fetchAlbumTracks } from './tracks'
 import type { AppEnv } from './types'
 import { asObject, parseColor, parseList, parseSpotifyId, parseSyncAlbum, parseTagId, parseTagName } from './validate'
 
@@ -112,33 +113,17 @@ libraryRoutes.post('/sync/finish', async (c) => {
   return c.json({ removed, version: removed > 0 ? versionFrom(results) : null })
 })
 
-interface SpotifyTrack {
-  name: string
-  duration_ms: number
-  track_number: number
-  disc_number: number
-  artists?: { name: string }[]
-}
-
-const TRACK_PAGE = 50
-/** 200 titres suffisent aux plus gros coffrets, et bornent le nombre de sous-requêtes. */
-const MAX_TRACK_PAGES = 4
-
-/** Titres d'un album, lus chez Spotify à l'ouverture d'une fiche. Rien n'est conservé en base. */
+/** Titres d'un album, lus chez Spotify à l'ouverture d'une fiche. */
 libraryRoutes.get('/albums/:id/tracks', async (c) => {
   const albumId = parseSpotifyId(c.req.param('id'))
   const { accessToken } = await getTokens(c.env)
-  const tracks: TrackRow[] = []
-  for (let page = 0; page < MAX_TRACK_PAGES; page++) {
-    const path = `/albums/${albumId}/tracks?limit=${TRACK_PAGE}&offset=${page * TRACK_PAGE}`
-    const res = await spotifyFetch(c.env, path, {}, accessToken)
-    if (!res.ok) throw await spotifyError(res)
-    const { items = [] } = await res.json<{ items?: SpotifyTrack[] }>()
-    for (const t of items) {
-      tracks.push([t.track_number, t.disc_number, t.name, t.duration_ms, (t.artists ?? []).map((a) => a.name).join(', ')])
-    }
-    if (items.length < TRACK_PAGE) break
-  }
+  const tracks: TrackRow[] = (await fetchAlbumTracks(c.env, accessToken, albumId)).map((t) => [
+    t.track_number,
+    t.disc_number,
+    t.name,
+    t.duration_ms,
+    (t.artists ?? []).map((a) => a.name).join(', '),
+  ])
   return c.json({ tracks })
 })
 

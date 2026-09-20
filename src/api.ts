@@ -6,6 +6,7 @@ import type {
   MeResponse,
   MutationResult,
   PlayResult,
+  QueueResult,
   SuggestPlan,
   SuggestRunResult,
   SuggestionRow,
@@ -113,6 +114,9 @@ export const api = {
   albumTracks: (albumId: string) => request<{ tracks: TrackRow[] }>('GET', `/albums/${albumId}/tracks`),
 
   devices: () => request<{ devices: Device[] }>('GET', '/devices'),
+  /** Ajoute les titres de l'album à la file de lecture, dans l'ordre. */
+  queueAlbum: (albumId: string, deviceId: string | null, clientKind: ClientKind) =>
+    request<QueueResult>('POST', '/queue', { albumId, deviceId, clientKind }),
   play: (albumId: string, deviceId: string | null, clientKind: ClientKind, trackPosition = 0) =>
     request<PlayResult>('POST', '/play', { albumId, deviceId, clientKind, trackPosition }),
   /** Envoyé juste avant d'ouvrir Spotify : keepalive garantit l'envoi même si la page passe en arrière-plan. */
