@@ -1,7 +1,6 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import type { SpotifyStatus } from '../../shared/api'
 import { countTags, filterAlbums, hasActiveFilters, sortAlbums } from '../lib/filter'
-import { queueAlbum } from '../lib/queue'
 import { plural } from '../lib/text'
 import { EMPTY_FILTERS, type Filters, type SortKey } from '../lib/types'
 import { deleteAlbums, refreshLibrary, runSuggestions, runSync, useLibrary } from '../store'
@@ -59,7 +58,6 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
   const [bulkOpen, setBulkOpen] = useState(false)
   const [tagPanelOpen, setTagPanelOpen] = useState(false)
   const [suggestOpen, setSuggestOpen] = useState(false)
-  const [launching, setLaunching] = useState(false)
   const suggestions = useLibrary((s) => s.suggestions)
   const suggestRun = useLibrary((s) => s.suggestRun)
   const pendingSuggestions = useMemo(
@@ -157,24 +155,6 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
       return
     }
     setOpen({ id: pool[Math.floor(Math.random() * pool.length)].id, random: true })
-  }
-
-  /**
-   * Un album au hasard parmi les résultats affichés, envoyé directement dans la file de lecture.
-   * Sans fiche à ouvrir : le message le nomme, puisqu'on ne l'a pas choisi.
-   */
-  const playRandom = async () => {
-    if (results.length === 0) {
-      toast('Aucun album à tirer au sort avec ces filtres.')
-      return
-    }
-    const album = results[Math.floor(Math.random() * results.length)]
-    setLaunching(true)
-    try {
-      await queueAlbum(album.id, { connected: spotify === 'connected', albumName: album.name })
-    } finally {
-      setLaunching(false)
-    }
   }
 
   const analyze = () => {
@@ -420,13 +400,11 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
               active={active}
               sort={sort}
               pendingSuggestions={pendingSuggestions}
-              launching={launching}
               setFilters={setFilters}
               onClearFilters={() => setFilters(EMPTY_FILTERS)}
               onSort={setSort}
               onOpenSuggest={() => setSuggestOpen(true)}
               onSurprise={surprise}
-              onPlayRandom={() => void playRandom()}
             />
           )}
 

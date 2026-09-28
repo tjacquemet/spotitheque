@@ -1,4 +1,4 @@
-// File de lecture Spotify, partagée par la fiche d'un album et le tirage au sort de la bibliothèque.
+// File de lecture Spotify : la boucle d'appels et ce qu'on en dit, hors du hook qui s'occupe des appareils.
 // Tout passe par la file, même quand rien ne joue : un album ajouté plus tard se range à la fin
 // au lieu de s'insérer au milieu de celui en cours.
 
@@ -16,18 +16,12 @@ export function openSpotifyAlbum(albumId: string, connected: boolean, trackPosit
 }
 
 /**
- * Ce qui est parti dans la file. L'album n'est nommé que lorsqu'on ne l'a pas sous les yeux —
- * après un tirage au sort, savoir lequel a été lancé est tout l'intérêt du message.
- * Quand la lecture démarre, le premier titre joue déjà : les suivants seuls sont « à la suite ».
+ * Ce qui est parti dans la file. Quand la lecture démarre, le premier titre joue déjà :
+ * les suivants seuls sont « à la suite ».
  */
-export function queueMessage(started: boolean, added: number, device: string, albumName?: string): string {
+export function queueMessage(started: boolean, added: number, device: string): string {
   const appareil = `sur ${device}`
   const suite = added > 1 ? ` · ${plural(added - 1, 'titre à la suite', 'titres à la suite')}` : ''
-  if (albumName) {
-    return started
-      ? `« ${albumName} » lancé ${appareil}${suite}`
-      : `« ${albumName} » ajouté à la file ${appareil} · ${plural(added, 'titre', 'titres')}`
-  }
   return started
     ? `Lecture lancée ${appareil}${suite}`
     : `${plural(added, 'titre ajouté', 'titres ajoutés')} à la file ${appareil}`
@@ -37,15 +31,13 @@ export interface QueueOptions {
   connected: boolean
   /** Appareil imposé ; sinon le serveur reprend celui qui joue, ou celui du même type que l'écran. */
   deviceId?: string | null
-  /** Nom de l'album, à annoncer quand il n'est pas sous les yeux. */
-  albumName?: string
 }
 
 /**
  * Empile les titres de l'album dans la file de Spotify et annonce le résultat.
  * Un appel par lot de titres : le Worker est borné en sous-requêtes, pas les coffrets.
  */
-export async function queueAlbum(albumId: string, { connected, deviceId = null, albumName }: QueueOptions): Promise<void> {
+export async function queueAlbum(albumId: string, { connected, deviceId = null }: QueueOptions): Promise<void> {
   if (!connected) {
     toast('Connecte Spotify pour utiliser la file de lecture.', { tone: 'error' })
     return
@@ -64,7 +56,7 @@ export async function queueAlbum(albumId: string, { connected, deviceId = null, 
     }
 
     if (result.status === 'queued' || result.status === 'started') {
-      toast(queueMessage(started, added, result.device.name, albumName))
+      toast(queueMessage(started, added, result.device.name))
     } else if (result.status === 'no_device' && isPhone) {
       // Spotify est fermé sur le téléphone : on l'ouvre dans le même geste, la lecture suivra.
       toast('Ouverture de Spotify…')

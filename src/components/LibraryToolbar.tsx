@@ -1,6 +1,6 @@
 import { plural } from '../lib/text'
 import type { Filters, SortKey } from '../lib/types'
-import { DiceIcon, DicePlayIcon, SparkleIcon } from './Icons'
+import { DiceIcon, SparkleIcon } from './Icons'
 
 /** Libellés du menu de tri, dans l'ordre d'affichage. */
 export const SORTS: Record<SortKey, string> = {
@@ -19,33 +19,25 @@ interface LibraryToolbarProps {
   active: boolean
   sort: SortKey
   pendingSuggestions: number
-  /** Un album au hasard part dans la file : le bouton attend la réponse de Spotify. */
-  launching: boolean
   setFilters: (update: (f: Filters) => Filters) => void
   onClearFilters: () => void
   onSort: (value: SortKey) => void
   onOpenSuggest: () => void
   onSurprise: () => void
-  onPlayRandom: () => void
 }
 
-/**
- * Ligne au-dessus de la grille : nombre de résultats, combinaison des tags, tri, suggestions.
- * Deux dés ferment la marche : l'un ouvre un album au hasard, l'autre le lance sans rien demander.
- */
+/** Ligne au-dessus de la grille : nombre de résultats, combinaison des tags, tri, suggestions, hasard. */
 export function LibraryToolbar({
   resultCount,
   filters,
   active,
   sort,
   pendingSuggestions,
-  launching,
   setFilters,
   onClearFilters,
   onSort,
   onOpenSuggest,
   onSurprise,
-  onPlayRandom,
 }: LibraryToolbarProps) {
   return (
     <div className="toolbar">
@@ -95,16 +87,6 @@ export function LibraryToolbar({
       </button>
       <button type="button" className="icon-btn accent" onClick={onSurprise} aria-label="Surprends-moi" title="Surprends-moi">
         <DiceIcon />
-      </button>
-      <button
-        type="button"
-        className="icon-btn accent"
-        onClick={onPlayRandom}
-        disabled={launching}
-        aria-label="Lancer un album au hasard"
-        title="Lancer un album au hasard"
-      >
-        <DicePlayIcon />
       </button>
     </div>
   )

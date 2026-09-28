@@ -55,14 +55,6 @@ export const DiceIcon = (p: IconProps) => (
   </Icon>
 )
 
-/** Le même dé, mais qui lance : tirage au sort et lecture dans le même geste. */
-export const DicePlayIcon = (p: IconProps) => (
-  <Icon {...p}>
-    <rect x="3.5" y="3.5" width="17" height="17" rx="4" />
-    <path d="M10.2 8.4 15.6 12l-5.4 3.6Z" fill="currentColor" stroke="none" />
-  </Icon>
-)
-
 export const TagIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M3.5 12.1V4.5a1 1 0 0 1 1-1h7.6a1 1 0 0 1 .7.3l7.9 7.9a1 1 0 0 1 0 1.4l-7.6 7.6a1 1 0 0 1-1.4 0l-7.9-7.9a1 1 0 0 1-.3-.7Z" />
