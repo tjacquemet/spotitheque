@@ -2,11 +2,9 @@ import { useEffect, useState } from 'react'
 import type { Device, SpotifyStatus } from '../../shared/api'
 import { pickDevice } from '../../shared/devices'
 import { api } from '../api'
-import { clientKind, isPhone, spotifyAlbumUrl } from '../lib/device'
-import { plural } from '../lib/text'
+import { clientKind, isPhone } from '../lib/device'
+import { NO_DEVICE_MESSAGE, openSpotifyAlbum, queueAlbum } from '../lib/queue'
 import { toast, toastError } from '../toast'
-
-export const NO_DEVICE_MESSAGE = 'Aucun appareil Spotify disponible : ouvre Spotify sur un appareil, puis réessaie.'
 
 export interface AlbumPlayback {
   connected: boolean
@@ -54,54 +52,13 @@ export function useAlbumPlayback(albumId: string, spotify: SpotifyStatus | null)
 
   const target = devices ? pickDevice(devices, { deviceId: choice, clientKind }) : null
 
-  /** Ouvre l'album dans l'appli Spotify ; le serveur lancera la lecture dès que le téléphone sera connecté. */
-  const openSpotify = (trackPosition = 0) => {
-    if (connected && isPhone) void api.playWhenReady(albumId, trackPosition).catch(() => undefined)
-    window.location.href = spotifyAlbumUrl(albumId)
-  }
+  const openSpotify = (trackPosition = 0) => openSpotifyAlbum(albumId, connected, trackPosition)
 
+  // L'album est sous les yeux : le message n'a pas besoin de le nommer.
   const queue = async () => {
-    if (!connected) {
-      toast('Connecte Spotify pour utiliser la file de lecture.', { tone: 'error' })
-      return
-    }
     setBusy(true)
     try {
-      // Un appel par lot de titres : le Worker est borné en sous-requêtes, pas les coffrets.
-      let from = 0
-      let added = 0
-      let started = false
-      let result = await api.queueAlbum(albumId, choice, clientKind, from)
-      while ((result.status === 'queued' || result.status === 'started') && result.queued > 0) {
-        added += result.queued
-        started ||= result.status === 'started'
-        from = result.from + result.queued
-        if (from >= result.total) break
-        result = await api.queueAlbum(albumId, choice, clientKind, from)
-      }
-
-      if (result.status === 'queued' || result.status === 'started') {
-        const appareil = `sur ${result.device.name}`
-        const suite = added > 1 ? ` · ${plural(added - 1, 'titre à la suite', 'titres à la suite')}` : ''
-        toast(
-          started
-            ? `Lecture lancée ${appareil}${suite}`
-            : `${plural(added, 'titre ajouté', 'titres ajoutés')} à la file ${appareil}`,
-        )
-      } else if (result.status === 'no_device' && isPhone) {
-        // Spotify est fermé sur le téléphone : on l'ouvre dans le même geste, la lecture suivra.
-        toast('Ouverture de Spotify…')
-        openSpotify()
-      } else if (result.status === 'no_playback') {
-        toast("Spotify n'a pas pu lancer la lecture sur cet appareil : ouvre Spotify, puis réessaie.", {
-          tone: 'error',
-          duration: 8000,
-        })
-      } else {
-        toast(NO_DEVICE_MESSAGE, { tone: 'error' })
-      }
-    } catch (err) {
-      toastError(err)
+      await queueAlbum(albumId, { connected, deviceId: choice })
     } finally {
       setBusy(false)
     }
