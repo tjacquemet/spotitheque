@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { TAG_NAME_MAX, normalizeTagName } from '../../shared/tags'
+import { SHORT_LABEL } from '../lib/filter'
 import { normalize, plural } from '../lib/text'
 import type { Filters, Tag } from '../lib/types'
 import { createTag } from '../store'
@@ -17,6 +18,8 @@ interface TagFilterPanelProps {
   untaggedCount: number
   /** « Sans tag » ou « Sans autre tag » selon qu'un tag est déjà sélectionné. */
   untaggedLabel: string
+  /** Albums courts parmi ceux qu'affichent les filtres actuels. */
+  shortCount: number
   removedCount: number
   hiddenCount: number
   active: boolean
@@ -33,6 +36,7 @@ export function TagFilterPanel({
   filters,
   untaggedCount,
   untaggedLabel,
+  shortCount,
   removedCount,
   hiddenCount,
   active,
@@ -108,6 +112,17 @@ export function TagFilterPanel({
           >
             <span className="tag-row-name">{untaggedLabel}</span>
             <span className="tag-row-count">{untaggedCount}</span>
+          </button>
+        </li>
+        <li className={`tag-row ${filters.short ? 'on' : 'off'}`}>
+          <button
+            type="button"
+            className="tag-row-main"
+            aria-pressed={filters.short}
+            onClick={() => setFilters((f) => ({ ...f, short: !f.short }))}
+          >
+            <span className="tag-row-name">{SHORT_LABEL}</span>
+            <span className="tag-row-count">{shortCount}</span>
           </button>
         </li>
         {removedCount > 0 && (

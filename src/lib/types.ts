@@ -50,6 +50,17 @@ export interface Filters {
   untagged: boolean
   removed: boolean
   hidden: boolean
+  /** Ne garder que les formats courts : EP, single, mini-album. */
+  short: boolean
 }
 
-export const EMPTY_FILTERS: Filters = { query: '', include: [], exclude: [], mode: 'and', untagged: false, removed: false, hidden: false }
+export const EMPTY_FILTERS: Filters = {
+  query: '',
+  include: [],
+  exclude: [],
+  mode: 'and',
+  untagged: false,
+  removed: false,
+  hidden: false,
+  short: false,
+}

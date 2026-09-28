@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef } from 'react'
+import { SHORT_LABEL } from '../lib/filter'
 import { tagGroupLabel } from '../lib/groups'
 import type { Filters, Tag } from '../lib/types'
 import { TagIcon } from './Icons'
@@ -11,6 +12,8 @@ interface TagBarProps {
   /** « Sans tag » ou « Sans autre tag » selon qu'un tag est déjà sélectionné. */
   untaggedLabel: string
   untaggedCount: number
+  /** Albums courts parmi ceux qu'affichent les filtres actuels. */
+  shortCount: number
   removedCount: number
   hiddenCount: number
   onToggle: (id: number) => void
@@ -29,6 +32,7 @@ export function TagBar({
   filters,
   untaggedLabel,
   untaggedCount,
+  shortCount,
   removedCount,
   hiddenCount,
   onToggle,
@@ -89,6 +93,12 @@ export function TagBar({
           count={untaggedCount}
           state={filters.untagged ? 'on' : 'off'}
           onClick={() => setFilters((f) => ({ ...f, untagged: !f.untagged }))}
+        />
+        <TagChip
+          label={SHORT_LABEL}
+          count={shortCount}
+          state={filters.short ? 'on' : 'off'}
+          onClick={() => setFilters((f) => ({ ...f, short: !f.short }))}
         />
         {removedCount > 0 && (
           <TagChip

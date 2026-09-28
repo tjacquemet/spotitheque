@@ -86,6 +86,11 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
     [data, effective],
   )
   const untaggedLabel = effective.include.length > 0 ? 'Sans autre tag' : 'Sans tag'
+  // Même principe pour les formats courts : combien resteraient en ajoutant ce filtre aux autres.
+  const shortCount = useMemo(
+    () => (data ? filterAlbums(data.albums, data.links, { ...effective, short: true }).length : 0),
+    [data, effective],
+  )
   const active = hasActiveFilters(effective)
 
   // Hauteur réelle de l'en-tête : la colonne de tags se colle juste en dessous.
@@ -229,6 +234,7 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
         filters={effective}
         untaggedCount={untaggedCount}
         untaggedLabel={untaggedLabel}
+        shortCount={shortCount}
         removedCount={removedCount}
         hiddenCount={hiddenCount}
         active={active}
@@ -368,6 +374,7 @@ export function LibraryScreen({ spotify, onNavigate }: Props) {
             filters={effective}
             untaggedLabel={untaggedLabel}
             untaggedCount={untaggedCount}
+            shortCount={shortCount}
             removedCount={removedCount}
             hiddenCount={hiddenCount}
             onToggle={tapTag}

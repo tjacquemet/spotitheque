@@ -3,6 +3,10 @@ import type { Album, Filters, SortKey } from './types'
 
 const NO_TAGS: ReadonlySet<number> = new Set()
 
+/** Au-delà, ce n'est plus un format court : le filtre garde EP, singles et mini-albums. */
+export const SHORT_MAX_TRACKS = 5
+export const SHORT_LABEL = `${SHORT_MAX_TRACKS} titres ou moins`
+
 /** Albums correspondant aux filtres (recherche, tags inclus/exclus, filtres spéciaux). */
 export function filterAlbums(albums: Album[], links: Map<string, Set<number>>, f: Filters): Album[] {
   const words = normalize(f.query).split(/\s+/).filter(Boolean)
@@ -10,6 +14,8 @@ export function filterAlbums(albums: Album[], links: Map<string, Set<number>>, f
     // Un album masqué n'apparaît que sous « Masqués », qu'il soit ou non encore dans Spotify.
     if (album.hidden !== f.hidden) return false
     if (!f.hidden && album.inLibrary === f.removed) return false
+    // Faute de nombre de titres connu, un album ne peut pas être annoncé comme court.
+    if (f.short && (album.totalTracks === null || album.totalTracks > SHORT_MAX_TRACKS)) return false
     const tags = links.get(album.id) ?? NO_TAGS
     // « Sans tag » seul : aucun tag. Combiné à des tags : aucun tag en dehors de ceux demandés.
     if (f.untagged) {
@@ -25,7 +31,7 @@ export function filterAlbums(albums: Album[], links: Map<string, Set<number>>, f
 }
 
 export function hasActiveFilters(f: Filters): boolean {
-  return f.query.trim() !== '' || f.include.length > 0 || f.exclude.length > 0 || f.untagged || f.removed || f.hidden
+  return f.query.trim() !== '' || f.include.length > 0 || f.exclude.length > 0 || f.untagged || f.removed || f.hidden || f.short
 }
 
 /** Hash stable (FNV-1a) : l'ordre aléatoire reste le même tant que la graine ne change pas. */

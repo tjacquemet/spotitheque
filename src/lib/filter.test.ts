@@ -74,6 +74,28 @@ describe('filterAlbums', () => {
     })
   })
 
+  describe('formats courts', () => {
+    const withShort = [
+      ...albums,
+      album('ep', 'Cinq titres', 'Quelqu’un', { totalTracks: 5 }),
+      album('single', 'Un titre', 'Quelqu’un', { totalTracks: 1 }),
+      album('long', 'Six titres', 'Quelqu’un', { totalTracks: 6 }),
+    ]
+    const shortLinks = new Map([...links, ['ep', new Set([CALME])]])
+
+    it('garde cinq titres, pas six — ni les albums au nombre de titres inconnu', () => {
+      expect(ids(filterAlbums(withShort, links, { ...EMPTY_FILTERS, short: true }))).toEqual(['ep', 'single'])
+    })
+
+    it('se combine à un tag', () => {
+      expect(ids(filterAlbums(withShort, shortLinks, { ...EMPTY_FILTERS, include: [CALME], short: true }))).toEqual(['ep'])
+    })
+
+    it('compte le filtre comme actif', () => {
+      expect(hasActiveFilters({ ...EMPTY_FILTERS, short: true })).toBe(true)
+    })
+  })
+
   it('filtre les albums sans tag', () => {
     expect(ids(filterAlbums(albums, links, { ...EMPTY_FILTERS, untagged: true }))).toEqual(['d'])
   })
