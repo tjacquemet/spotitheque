@@ -130,22 +130,6 @@ export const QueueIcon = (p: IconProps) => (
   </Icon>
 )
 
-/** La file qu'on balaie pour y mettre autre chose : effacée, puis relancée. */
-export const QueueReplaceIcon = (p: IconProps) => (
-  <Icon {...p}>
-    <path d="M3 6h13M3 12h8M3 18h8" />
-    <path d="M14.5 14.5 20.5 18l-6 3.5Z" fill="currentColor" stroke="none" />
-  </Icon>
-)
-
-/** La même file que QueueIcon, mais qu'on efface. */
-export const QueueClearIcon = (p: IconProps) => (
-  <Icon {...p}>
-    <path d="M3 6h13M3 12h9M3 18h9" />
-    <path d="m14.6 14.6 6 6M20.6 14.6l-6 6" />
-  </Icon>
-)
-
 export const EyeIcon = (p: IconProps) => (
   <Icon {...p}>
     <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />

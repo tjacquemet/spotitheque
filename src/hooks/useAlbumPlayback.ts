@@ -3,7 +3,7 @@ import type { Device, SpotifyStatus } from '../../shared/api'
 import { pickDevice } from '../../shared/devices'
 import { api } from '../api'
 import { clientKind, isPhone } from '../lib/device'
-import { NO_DEVICE_MESSAGE, clearQueue, openSpotifyAlbum, queueAlbum } from '../lib/queue'
+import { NO_DEVICE_MESSAGE, openSpotifyAlbum, queueAlbum } from '../lib/queue'
 import { toast, toastError } from '../toast'
 
 export interface AlbumPlayback {
@@ -16,10 +16,6 @@ export interface AlbumPlayback {
   busy: boolean
   /** Empile l'album dans la file de lecture de Spotify, sans interrompre ce qui joue. */
   queue: () => Promise<void>
-  /** Vide la file, puis y met cet album : il joue tout de suite au lieu d'attendre son tour. */
-  replace: () => Promise<void>
-  /** Vide la file, en gardant le titre en cours. */
-  clear: () => Promise<void>
   /** Spotify était fermé : il reste à l'ouvrir à la main. */
   mustOpen: boolean
   play: (trackPosition?: number) => Promise<void>
@@ -68,24 +64,6 @@ export function useAlbumPlayback(albumId: string, spotify: SpotifyStatus | null)
     }
   }
 
-  const replace = async () => {
-    setBusy(true)
-    try {
-      await queueAlbum(albumId, { connected, deviceId: choice, replace: true })
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const clear = async () => {
-    setBusy(true)
-    try {
-      await clearQueue(connected)
-    } finally {
-      setBusy(false)
-    }
-  }
-
   const play = async (trackPosition = 0) => {
     setMustOpen(false)
     if (!connected) {
@@ -115,5 +93,5 @@ export function useAlbumPlayback(albumId: string, spotify: SpotifyStatus | null)
     }
   }
 
-  return { connected, devices, target, choice, setChoice, busy, mustOpen, play, queue, replace, clear, openSpotify }
+  return { connected, devices, target, choice, setChoice, busy, mustOpen, play, queue, openSpotify }
 }

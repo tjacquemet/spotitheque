@@ -126,17 +126,6 @@ export type QueueResult =
   | { status: 'no_device' }
   | { status: 'no_playback' }
 
-/**
- * Vidage de la file. Spotify n'offre aucun moyen de retirer un titre : le Worker relance ce qui joue,
- * ce qui réinitialise la file, puis compare les titres d'avant et d'après — `removed` est ce qui en est
- * réellement sorti. `remaining` compte ce que Spotify annonce ensuite, lecture automatique comprise :
- * elle regarnit la file en quelques secondes, et rien dans l'API ne la distingue d'une vraie file.
- */
-export type ClearQueueResult =
-  | { status: 'cleared'; removed: number; remaining: number }
-  | { status: 'nothing_removed'; remaining: number }
-  | { status: 'nothing_playing' }
-
 export interface ApiErrorBody {
   error: { code: string; message: string }
 }
