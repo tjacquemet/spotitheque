@@ -17,27 +17,23 @@ describe('queueMessage', () => {
 })
 
 describe('clearMessage', () => {
-  it('compte ce que la relecture dit avoir disparu', () => {
-    expect(clearMessage({ status: 'cleared', before: 11, after: 0 })).toEqual({
+  it('compte les titres sortis, pas ceux qui restent', () => {
+    // 20 titres annoncés après coup : la lecture automatique a pris la place, le vidage a bien eu lieu.
+    expect(clearMessage({ status: 'cleared', removed: 11, remaining: 20 })).toEqual({
       text: 'File vidée · 11 titres retirés',
       ok: true,
     })
   })
 
   it('ne dit rien quand il n’y avait rien', () => {
-    expect(clearMessage({ status: 'cleared', before: 0, after: 0 }).text).toBe('La file était déjà vide.')
+    expect(clearMessage({ status: 'cleared', removed: 0, remaining: 0 }).text).toBe('La file était déjà vide.')
   })
 
-  it("avoue l'échec plutôt que d'annoncer une file vide", () => {
-    expect(clearMessage({ status: 'unchanged', before: 11, after: 11 })).toEqual({
-      text: "Spotify n'a pas vidé la file (11 titres toujours en attente).",
+  it("n'accuse pas Spotify quand il n'y avait rien à retirer", () => {
+    expect(clearMessage({ status: 'nothing_removed', remaining: 20 })).toEqual({
+      text: "Rien n'est sorti de la file : ces 20 titres annoncés sont sans doute la lecture automatique de Spotify.",
       ok: false,
     })
-  })
-
-  it('reste sobre quand Spotify ne donne pas les comptes', () => {
-    expect(clearMessage({ status: 'cleared', before: null, after: 0 }).text).toBe('File vidée.')
-    expect(clearMessage({ status: 'unchanged', before: null, after: null }).text).toBe("Spotify n'a pas vidé la file.")
   })
 
   it('distingue « rien ne joue » d’une file vide', () => {

@@ -29,18 +29,18 @@ export function queueMessage(started: boolean, added: number, device: string): s
 }
 
 /**
- * Ce que le vidage a donné. Spotify ne sachant pas vider une file, le Worker relance ce qui joue et
- * relit la file : le message dit ce qui a été constaté, jamais ce qui était espéré.
+ * Ce que le vidage a donné : les titres réellement sortis de la file, pas la longueur de ce qui reste.
+ * Spotify regarnit la file de recommandations dès qu'elle se vide, et rien dans son API ne les distingue
+ * d'une vraie file d'attente — d'où le « sans doute » quand rien n'est sorti.
  */
 export function clearMessage(result: ClearQueueResult): { text: string; ok: boolean } {
   if (result.status === 'nothing_playing') return { text: "Rien ne joue : il n'y a pas de file à vider.", ok: false }
-  if (result.status === 'unchanged') {
-    const reste = result.after === null ? '' : ` (${plural(result.after, 'titre toujours en attente', 'titres toujours en attente')})`
-    return { text: `Spotify n'a pas vidé la file${reste}.`, ok: false }
+  if (result.status === 'nothing_removed') {
+    const reste = plural(result.remaining, 'titre annoncé', 'titres annoncés')
+    return { text: `Rien n'est sorti de la file : ces ${reste} sont sans doute la lecture automatique de Spotify.`, ok: false }
   }
-  if (result.before === 0) return { text: 'La file était déjà vide.', ok: true }
-  const retires = result.before !== null && result.after !== null ? result.before - result.after : null
-  return { text: retires === null ? 'File vidée.' : `File vidée · ${plural(retires, 'titre retiré', 'titres retirés')}`, ok: true }
+  if (result.removed === 0) return { text: 'La file était déjà vide.', ok: true }
+  return { text: `File vidée · ${plural(result.removed, 'titre retiré', 'titres retirés')}`, ok: true }
 }
 
 /** Vide la file de lecture, puis annonce ce que Spotify a réellement fait. */

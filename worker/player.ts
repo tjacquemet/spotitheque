@@ -4,6 +4,7 @@ import { pickDevice } from '../shared/devices'
 import { recordActivity } from './activity'
 import { badRequest } from './errors'
 import { getTokens, spotifyError, spotifyFetch } from './spotify'
+import { removedFromQueue } from './queue'
 import { fetchAlbumTracks } from './tracks'
 import type { AppEnv } from './types'
 import { asObject, parseSpotifyId, parseTrackPosition } from './validate'
@@ -157,12 +158,13 @@ interface PlaybackState {
   device?: { id?: string | null } | null
 }
 
-/** Longueur de la file annoncée par Spotify (titres après celui en cours). null si la lecture échoue. */
-async function queueLength(env: Env, token: string): Promise<number | null> {
+/** URI des titres annoncés après celui en cours. Tableau vide si Spotify ne répond pas : rien à comparer. */
+async function queueUris(env: Env, token: string): Promise<string[]> {
   const res = await spotifyFetch(env, '/me/player/queue', {}, token)
-  if (!res.ok) return null
-  const body = await res.json<{ queue?: unknown[] }>().catch(() => null)
-  return Array.isArray(body?.queue) ? body.queue.length : null
+  if (!res.ok) return []
+  const body = await res.json<{ queue?: { uri?: string }[] }>().catch(() => null)
+  if (!Array.isArray(body?.queue)) return []
+  return body.queue.map((t) => t?.uri).filter((uri): uri is string => typeof uri === 'string')
 }
 
 /** « After modifying the queue, it takes some time before its current value starts to be returned. » */
@@ -172,7 +174,8 @@ const QUEUE_CHECKS = 3
 /**
  * Vide la file de lecture. Spotify n'a pas d'endpoint pour ça : relancer le titre en cours à sa position
  * réinitialise la file. Le contexte est repris s'il y en a un, sinon l'album en cours s'arrêterait net
- * après le titre. Rien n'est affirmé : la file est relue, et c'est elle qui dit si la manœuvre a pris.
+ * après le titre. La file est relue ensuite, et comparée titre par titre : Spotify la regarnit de
+ * recommandations en quelques secondes, si bien qu'une file vidée paraît pleine à qui compte les lignes.
  */
 playerRoutes.post('/queue/clear', async (c) => {
   const { accessToken } = await getTokens(c.env)
@@ -183,9 +186,9 @@ playerRoutes.post('/queue/clear', async (c) => {
   const uri = state.item?.uri
   if (!uri) return c.json<ClearQueueResult>({ status: 'nothing_playing' })
 
-  const before = await queueLength(c.env, accessToken)
+  const before = await queueUris(c.env, accessToken)
   // Rien en attente : inutile de toucher à la lecture pour un résultat déjà acquis.
-  if (before === 0) return c.json<ClearQueueResult>({ status: 'cleared', before: 0, after: 0 })
+  if (before.length === 0) return c.json<ClearQueueResult>({ status: 'cleared', removed: 0, remaining: 0 })
 
   const device = state.device?.id ? `?device_id=${encodeURIComponent(state.device.id)}` : ''
   const body = state.context?.uri
@@ -198,15 +201,24 @@ playerRoutes.post('/queue/clear', async (c) => {
     await spotifyFetch(c.env, `/me/player/pause${device}`, { method: 'PUT' }, accessToken).catch(() => null)
   }
 
-  let after: number | null = null
+  let after: string[] = []
+  let removed = 0
   for (let i = 0; i < QUEUE_CHECKS; i++) {
     await sleep(QUEUE_SETTLE_MS)
-    after = await queueLength(c.env, accessToken)
-    if (after === 0 || (before !== null && after !== null && after < before)) break
+    after = await queueUris(c.env, accessToken)
+    removed = removedFromQueue(before, after)
+    if (removed > 0) break
   }
-  const cleared = after === 0 || (before !== null && after !== null && after < before)
-  await recordActivity(c.env.DB, 'file_attente.vidage', { avant: before, apres: after, vide: cleared })
-  return c.json<ClearQueueResult>({ status: cleared ? 'cleared' : 'unchanged', before, after })
+  await recordActivity(c.env.DB, 'file_attente.vidage', {
+    avant: before.length,
+    apres: after.length,
+    retires: removed,
+  })
+  return c.json<ClearQueueResult>(
+    removed > 0
+      ? { status: 'cleared', removed, remaining: after.length }
+      : { status: 'nothing_removed', remaining: after.length },
+  )
 })
 
 const WAIT_WINDOW_MS = 25_000
