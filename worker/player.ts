@@ -101,11 +101,16 @@ async function startTrack(env: Env, token: string, trackId: string, deviceId: st
  * Ajoute l'album à la file de lecture, titre par titre et dans l'ordre — y compris quand rien ne joue :
  * le premier titre est alors lancé seul et les suivants s'empilent derrière lui. Tout passe ainsi par la
  * file, si bien qu'un album ajouté plus tard se range à la suite au lieu de s'insérer dans celui en cours.
+ *
+ * `replace` prend le chemin inverse : le premier titre est **lancé** au lieu d'être empilé, ce qui
+ * réinitialise la file (seul moyen offert par Spotify), et l'album repart donc sur une file vide.
  */
 playerRoutes.post('/queue', async (c) => {
   const body = asObject(await c.req.json())
   const albumId = parseSpotifyId(body.albumId)
   const from = parseTrackPosition(body.from)
+  // Vider la file avant d'y mettre l'album : seul le premier appel (rang 0) a de quoi la réinitialiser.
+  const replace = body.replace === true && from === 0
   const deviceId = body.deviceId === undefined || body.deviceId === null ? null : String(body.deviceId)
   if (deviceId !== null && (deviceId.length === 0 || deviceId.length > 100)) throw badRequest('Appareil invalide.')
   const { accessToken } = await getTokens(c.env)
@@ -118,6 +123,17 @@ playerRoutes.post('/queue', async (c) => {
   let queued = 0
   let started = false
   for (const track of tracks.slice(from, from + MAX_QUEUED)) {
+    const first = queued === 0 && from === 0
+    // Lancer un titre réinitialise la file : c'est ce qui fait place nette avant d'empiler l'album.
+    if (replace && first) {
+      if (!(await startTrack(c.env, accessToken, track.id as string, target.id))) {
+        return c.json<QueueResult>({ status: 'no_playback' })
+      }
+      started = true
+      queued++
+      await sleep(WAKE_MS)
+      continue
+    }
     const uri = encodeURIComponent(`spotify:track:${track.id}`)
     const res = await spotifyFetch(c.env, `/me/player/queue?uri=${uri}&device_id=${device}`, { method: 'POST' }, accessToken)
     if (res.ok) {
@@ -126,7 +142,7 @@ playerRoutes.post('/queue', async (c) => {
     }
     // 404 sur le tout premier titre : l'appareil est éveillé mais silencieux, il n'existe donc pas encore
     // de file. On lance ce titre seul, et les suivants reprennent leur place derrière lui.
-    if (res.status === 404 && queued === 0 && from === 0) {
+    if (res.status === 404 && first) {
       if (!(await startTrack(c.env, accessToken, track.id as string, target.id))) {
         return c.json<QueueResult>({ status: 'no_playback' })
       }
@@ -146,6 +162,7 @@ playerRoutes.post('/queue', async (c) => {
     depuis: from,
     total: tracks.length,
     lecture: started,
+    remplace: replace,
   })
   return c.json<QueueResult>({ status: started ? 'started' : 'queued', device: target, queued, from, total: tracks.length })
 })

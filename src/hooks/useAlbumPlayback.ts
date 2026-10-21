@@ -16,6 +16,8 @@ export interface AlbumPlayback {
   busy: boolean
   /** Empile l'album dans la file de lecture de Spotify, sans interrompre ce qui joue. */
   queue: () => Promise<void>
+  /** Vide la file, puis y met cet album : il joue tout de suite au lieu d'attendre son tour. */
+  replace: () => Promise<void>
   /** Vide la file, en gardant le titre en cours. */
   clear: () => Promise<void>
   /** Spotify était fermé : il reste à l'ouvrir à la main. */
@@ -66,6 +68,15 @@ export function useAlbumPlayback(albumId: string, spotify: SpotifyStatus | null)
     }
   }
 
+  const replace = async () => {
+    setBusy(true)
+    try {
+      await queueAlbum(albumId, { connected, deviceId: choice, replace: true })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const clear = async () => {
     setBusy(true)
     try {
@@ -104,5 +115,5 @@ export function useAlbumPlayback(albumId: string, spotify: SpotifyStatus | null)
     }
   }
 
-  return { connected, devices, target, choice, setChoice, busy, mustOpen, play, queue, clear, openSpotify }
+  return { connected, devices, target, choice, setChoice, busy, mustOpen, play, queue, replace, clear, openSpotify }
 }

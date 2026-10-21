@@ -14,6 +14,10 @@ describe('queueMessage', () => {
   it('compte les titres empilés quand la musique jouait déjà', () => {
     expect(queueMessage(false, 12, 'Salon')).toBe('12 titres ajoutés à la file sur Salon')
   })
+
+  it('dit franchement que la file a sauté quand on la remplace', () => {
+    expect(queueMessage(true, 12, 'Salon', true)).toBe('File vidée, lecture lancée sur Salon · 11 titres à la suite')
+  })
 })
 
 describe('clearMessage', () => {

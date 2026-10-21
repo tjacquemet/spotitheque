@@ -18,11 +18,12 @@ export function openSpotifyAlbum(albumId: string, connected: boolean, trackPosit
 
 /**
  * Ce qui est parti dans la file. Quand la lecture démarre, le premier titre joue déjà :
- * les suivants seuls sont « à la suite ».
+ * les suivants seuls sont « à la suite ». `replace` le dit franchement : ce qui attendait a sauté.
  */
-export function queueMessage(started: boolean, added: number, device: string): string {
+export function queueMessage(started: boolean, added: number, device: string, replace = false): string {
   const appareil = `sur ${device}`
   const suite = added > 1 ? ` · ${plural(added - 1, 'titre à la suite', 'titres à la suite')}` : ''
+  if (replace) return `File vidée, lecture lancée ${appareil}${suite}`
   return started
     ? `Lecture lancée ${appareil}${suite}`
     : `${plural(added, 'titre ajouté', 'titres ajoutés')} à la file ${appareil}`
@@ -61,13 +62,15 @@ export interface QueueOptions {
   connected: boolean
   /** Appareil imposé ; sinon le serveur reprend celui qui joue, ou celui du même type que l'écran. */
   deviceId?: string | null
+  /** Vider la file avant d'y mettre l'album, au lieu de l'ajouter derrière ce qui attend déjà. */
+  replace?: boolean
 }
 
 /**
  * Empile les titres de l'album dans la file de Spotify et annonce le résultat.
  * Un appel par lot de titres : le Worker est borné en sous-requêtes, pas les coffrets.
  */
-export async function queueAlbum(albumId: string, { connected, deviceId = null }: QueueOptions): Promise<void> {
+export async function queueAlbum(albumId: string, { connected, deviceId = null, replace = false }: QueueOptions): Promise<void> {
   if (!connected) {
     toast('Connecte Spotify pour utiliser la file de lecture.', { tone: 'error' })
     return
@@ -76,17 +79,18 @@ export async function queueAlbum(albumId: string, { connected, deviceId = null }
     let from = 0
     let added = 0
     let started = false
-    let result = await api.queueAlbum(albumId, deviceId, clientKind, from)
+    let result = await api.queueAlbum(albumId, deviceId, clientKind, from, replace)
     while ((result.status === 'queued' || result.status === 'started') && result.queued > 0) {
       added += result.queued
       started ||= result.status === 'started'
       from = result.from + result.queued
       if (from >= result.total) break
+      // Les lots suivants s'empilent derrière le premier : la file a déjà été faite place nette.
       result = await api.queueAlbum(albumId, deviceId, clientKind, from)
     }
 
     if (result.status === 'queued' || result.status === 'started') {
-      toast(queueMessage(started, added, result.device.name))
+      toast(queueMessage(started, added, result.device.name, replace))
     } else if (result.status === 'no_device' && isPhone) {
       // Spotify est fermé sur le téléphone : on l'ouvre dans le même geste, la lecture suivra.
       toast('Ouverture de Spotify…')
