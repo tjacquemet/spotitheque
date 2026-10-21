@@ -1156,6 +1156,23 @@ a {
   margin-top: 18px;
 }
 
+/* « Ajouter à la file » prend toute la place ; « vider » se contente d'un carré à sa droite. */
+.play-row {
+  display: flex;
+  gap: 6px;
+}
+
+.play-row > .btn-primary {
+  flex: 1;
+  min-width: 0;
+}
+
+.clear-queue {
+  flex: none;
+  width: 52px;
+  padding: 0;
+}
+
 .device-line {
   display: flex;
   align-items: center;

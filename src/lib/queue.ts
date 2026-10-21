@@ -2,6 +2,7 @@
 // Tout passe par la file, même quand rien ne joue : un album ajouté plus tard se range à la fin
 // au lieu de s'insérer au milieu de celui en cours.
 
+import type { ClearQueueResult } from '../../shared/api'
 import { api } from '../api'
 import { toast, toastError } from '../toast'
 import { clientKind, isPhone, spotifyAlbumUrl } from './device'
@@ -25,6 +26,35 @@ export function queueMessage(started: boolean, added: number, device: string): s
   return started
     ? `Lecture lancée ${appareil}${suite}`
     : `${plural(added, 'titre ajouté', 'titres ajoutés')} à la file ${appareil}`
+}
+
+/**
+ * Ce que le vidage a donné. Spotify ne sachant pas vider une file, le Worker relance ce qui joue et
+ * relit la file : le message dit ce qui a été constaté, jamais ce qui était espéré.
+ */
+export function clearMessage(result: ClearQueueResult): { text: string; ok: boolean } {
+  if (result.status === 'nothing_playing') return { text: "Rien ne joue : il n'y a pas de file à vider.", ok: false }
+  if (result.status === 'unchanged') {
+    const reste = result.after === null ? '' : ` (${plural(result.after, 'titre toujours en attente', 'titres toujours en attente')})`
+    return { text: `Spotify n'a pas vidé la file${reste}.`, ok: false }
+  }
+  if (result.before === 0) return { text: 'La file était déjà vide.', ok: true }
+  const retires = result.before !== null && result.after !== null ? result.before - result.after : null
+  return { text: retires === null ? 'File vidée.' : `File vidée · ${plural(retires, 'titre retiré', 'titres retirés')}`, ok: true }
+}
+
+/** Vide la file de lecture, puis annonce ce que Spotify a réellement fait. */
+export async function clearQueue(connected: boolean): Promise<void> {
+  if (!connected) {
+    toast('Connecte Spotify pour utiliser la file de lecture.', { tone: 'error' })
+    return
+  }
+  try {
+    const { text, ok } = clearMessage(await api.clearQueue())
+    toast(text, ok ? {} : { tone: 'error', duration: 6000 })
+  } catch (err) {
+    toastError(err)
+  }
 }
 
 export interface QueueOptions {

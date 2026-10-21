@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import type { ClientKind, Device, PlayResult, QueueResult } from '../shared/api'
+import type { ClearQueueResult, ClientKind, Device, PlayResult, QueueResult } from '../shared/api'
 import { pickDevice } from '../shared/devices'
 import { recordActivity } from './activity'
 import { badRequest } from './errors'
@@ -42,6 +42,8 @@ async function startAlbum(env: Env, token: string, albumId: string, deviceId: st
   await spotifyFetch(env, `/me/player/shuffle?state=false&device_id=${device}`, { method: 'PUT' }, token).catch(() => null)
   return true
 }
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 function parseClientKind(v: unknown): ClientKind {
   return v === 'phone' ? 'phone' : 'desktop'
@@ -129,7 +131,7 @@ playerRoutes.post('/queue', async (c) => {
       }
       started = true
       queued++
-      await new Promise((resolve) => setTimeout(resolve, WAKE_MS))
+      await sleep(WAKE_MS)
       continue
     }
     if (queued === 0) throw await spotifyError(res)
@@ -145,6 +147,66 @@ playerRoutes.post('/queue', async (c) => {
     lecture: started,
   })
   return c.json<QueueResult>({ status: started ? 'started' : 'queued', device: target, queued, from, total: tracks.length })
+})
+
+interface PlaybackState {
+  is_playing?: boolean
+  progress_ms?: number | null
+  item?: { uri?: string } | null
+  context?: { uri?: string } | null
+  device?: { id?: string | null } | null
+}
+
+/** Longueur de la file annoncée par Spotify (titres après celui en cours). null si la lecture échoue. */
+async function queueLength(env: Env, token: string): Promise<number | null> {
+  const res = await spotifyFetch(env, '/me/player/queue', {}, token)
+  if (!res.ok) return null
+  const body = await res.json<{ queue?: unknown[] }>().catch(() => null)
+  return Array.isArray(body?.queue) ? body.queue.length : null
+}
+
+/** « After modifying the queue, it takes some time before its current value starts to be returned. » */
+const QUEUE_SETTLE_MS = 700
+const QUEUE_CHECKS = 3
+
+/**
+ * Vide la file de lecture. Spotify n'a pas d'endpoint pour ça : relancer le titre en cours à sa position
+ * réinitialise la file. Le contexte est repris s'il y en a un, sinon l'album en cours s'arrêterait net
+ * après le titre. Rien n'est affirmé : la file est relue, et c'est elle qui dit si la manœuvre a pris.
+ */
+playerRoutes.post('/queue/clear', async (c) => {
+  const { accessToken } = await getTokens(c.env)
+  const res = await spotifyFetch(c.env, '/me/player', {}, accessToken)
+  if (res.status === 204) return c.json<ClearQueueResult>({ status: 'nothing_playing' })
+  if (!res.ok) throw await spotifyError(res)
+  const state = await res.json<PlaybackState>()
+  const uri = state.item?.uri
+  if (!uri) return c.json<ClearQueueResult>({ status: 'nothing_playing' })
+
+  const before = await queueLength(c.env, accessToken)
+  // Rien en attente : inutile de toucher à la lecture pour un résultat déjà acquis.
+  if (before === 0) return c.json<ClearQueueResult>({ status: 'cleared', before: 0, after: 0 })
+
+  const device = state.device?.id ? `?device_id=${encodeURIComponent(state.device.id)}` : ''
+  const body = state.context?.uri
+    ? { context_uri: state.context.uri, offset: { uri }, position_ms: Math.max(0, state.progress_ms ?? 0) }
+    : { uris: [uri], position_ms: Math.max(0, state.progress_ms ?? 0) }
+  const played = await spotifyFetch(c.env, `/me/player/play${device}`, { method: 'PUT', body }, accessToken)
+  if (!played.ok) throw await spotifyError(played)
+  // Relancer remet la lecture en marche : on repose la pause si elle l'était.
+  if (state.is_playing === false) {
+    await spotifyFetch(c.env, `/me/player/pause${device}`, { method: 'PUT' }, accessToken).catch(() => null)
+  }
+
+  let after: number | null = null
+  for (let i = 0; i < QUEUE_CHECKS; i++) {
+    await sleep(QUEUE_SETTLE_MS)
+    after = await queueLength(c.env, accessToken)
+    if (after === 0 || (before !== null && after !== null && after < before)) break
+  }
+  const cleared = after === 0 || (before !== null && after !== null && after < before)
+  await recordActivity(c.env.DB, 'file_attente.vidage', { avant: before, apres: after, vide: cleared })
+  return c.json<ClearQueueResult>({ status: cleared ? 'cleared' : 'unchanged', before, after })
 })
 
 const WAIT_WINDOW_MS = 25_000
@@ -165,7 +227,7 @@ playerRoutes.post('/play/when-ready', async (c) => {
     (async () => {
       const deadline = Date.now() + WAIT_WINDOW_MS
       while (Date.now() < deadline) {
-        await new Promise((resolve) => setTimeout(resolve, POLL_MS))
+        await sleep(POLL_MS)
         const devices = await listDevices(c.env, accessToken).catch(() => [])
         const usable = devices.filter((d) => !d.isRestricted)
         const phone = usable.find((d) => d.type === 'Smartphone') ?? usable.find((d) => !known.has(d.id))

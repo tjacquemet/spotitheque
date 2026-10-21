@@ -9,7 +9,7 @@ import type { Album, Tag } from '../lib/types'
 import { applyTags, deleteAlbums, removeFromSpotify, setAlbumsHidden, useLibrary } from '../store'
 import { toast, toastError } from '../toast'
 import { AlbumCover } from './AlbumCover'
-import { DiceIcon, ExternalIcon, EyeIcon, EyeOffIcon, QueueIcon, SpeakerIcon, TrashIcon } from './Icons'
+import { DiceIcon, ExternalIcon, EyeIcon, EyeOffIcon, QueueClearIcon, QueueIcon, SpeakerIcon, TrashIcon } from './Icons'
 import { Sheet } from './Sheet'
 import { TagChip } from './TagChip'
 import { TagPicker } from './TagPicker'
@@ -18,7 +18,7 @@ import { TrackList } from './TrackList'
 const EMPTY = new Set<number>()
 
 function PlayControls({ album, playback }: { album: Album; playback: AlbumPlayback }) {
-  const { connected, devices, target, choice, setChoice, busy, mustOpen, queue, openSpotify } = playback
+  const { connected, devices, target, choice, setChoice, busy, mustOpen, queue, clear, openSpotify } = playback
 
   return (
     <div className="play-block">
@@ -27,9 +27,21 @@ function PlayControls({ album, playback }: { album: Album; playback: AlbumPlayba
           <ExternalIcon /> Ouvrir Spotify pour écouter
         </button>
       ) : (
-        <button type="button" className="btn btn-primary btn-block btn-lg" onClick={() => void queue()} disabled={busy}>
-          <QueueIcon /> {busy ? 'Ajout…' : 'Ajouter à la file'}
-        </button>
+        <div className="play-row">
+          <button type="button" className="btn btn-primary btn-lg" onClick={() => void queue()} disabled={busy}>
+            <QueueIcon /> {busy ? 'Ajout…' : 'Ajouter à la file'}
+          </button>
+          <button
+            type="button"
+            className="btn btn-lg clear-queue"
+            onClick={() => void clear()}
+            disabled={busy}
+            aria-label="Vider la file d'attente"
+            title="Vider la file d'attente"
+          >
+            <QueueClearIcon />
+          </button>
+        </div>
       )}
       {connected && (
         <label className="device-line">
