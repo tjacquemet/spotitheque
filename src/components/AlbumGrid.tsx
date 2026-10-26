@@ -1,6 +1,7 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { useBandSelect } from '../hooks/useBandSelect'
 import { useLongPress } from '../hooks/useLongPress'
+import { tagGroup } from '../lib/groups'
 import type { Album, Tag } from '../lib/types'
 import { AlbumCover } from './AlbumCover'
 import { CheckIcon } from './Icons'
@@ -44,7 +45,7 @@ const AlbumCard = memo(function AlbumCard({ album, tags, selecting, selected, on
       <div className="card-artist">{album.artistNames}</div>
       <div className="dots" aria-hidden="true">
         {tags.slice(0, MAX_DOTS).map((t) => (
-          <span key={t.id} style={{ background: t.color }} />
+          <span key={t.id} className={t.isPinned ? 'pinned' : undefined} style={{ background: t.color }} />
         ))}
         {tags.length > MAX_DOTS && <em>+{tags.length - MAX_DOTS}</em>}
       </div>
@@ -76,7 +77,12 @@ export function AlbumGrid({ albums, links, tagsById, selection, onOpen, onSelect
     if (!ids) return NO_TAGS
     let tags = tagCache.get(ids)
     if (!tags) {
-      tags = [...ids].map((id) => tagsById.get(id)).filter((t): t is Tag => Boolean(t))
+      // Épinglés d'abord : leur pastille tient la même place d'une carte à l'autre, et surtout
+      // elle ne tombe pas dans les « +2 » d'un album très tagué.
+      tags = [...ids]
+        .map((id) => tagsById.get(id))
+        .filter((t): t is Tag => Boolean(t))
+        .sort((a, b) => tagGroup(a) - tagGroup(b))
       tagCache.set(ids, tags)
     }
     return tags
