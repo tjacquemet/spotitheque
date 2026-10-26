@@ -1,4 +1,4 @@
-import type { ArtistRef } from '../../shared/api'
+import type { ArtistRef, TagShape } from '../../shared/api'
 
 export interface Album {
   id: string
@@ -28,6 +28,8 @@ export interface Tag {
   isGenre: boolean
   /** Tag épinglé : regroupé en tête de liste, avant les autres tags. */
   isPinned: boolean
+  /** Forme de sa pastille sur les pochettes : « dot » pour la plupart. */
+  shape: TagShape
 }
 
 export interface LibraryData {

@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import type { MeResponse, MutationResult, TagDto, TrackRow } from '../shared/api'
+import type { MeResponse, MutationResult, TagDto, TagShape, TrackRow } from '../shared/api'
 import { TAG_COLORS } from '../shared/tags'
 import { activityStmt, recordActivity } from './activity'
 import { bumpVersionStmt, getSetting, nowIso, setSettingStmt, versionFrom } from './db'
@@ -9,7 +9,7 @@ import { confirmRemoval } from './removal'
 import { getTokens, spotifyError, spotifyFetch } from './spotify'
 import { fetchAlbumTracks } from './tracks'
 import type { AppEnv } from './types'
-import { asObject, parseColor, parseList, parseSpotifyId, parseSyncAlbum, parseTagId, parseTagName } from './validate'
+import { asObject, parseColor, parseList, parseSpotifyId, parseSyncAlbum, parseTagId, parseTagName, parseTagShape } from './validate'
 
 export const libraryRoutes = new Hono<AppEnv>()
 
@@ -39,7 +39,7 @@ const LIBRARY_QUERIES = [
   "SELECT CAST(value AS INTEGER) AS j FROM settings WHERE key = 'data_version'",
   `SELECT json_array(id, name, json(artists), image_url, image_url_large, release_date, total_tracks, added_at, in_library, last_played_at, hidden) AS j
    FROM albums`,
-  'SELECT json_array(id, name, color, is_genre, is_pinned) AS j FROM tags ORDER BY name_key',
+  'SELECT json_array(id, name, color, is_genre, is_pinned, shape) AS j FROM tags ORDER BY name_key',
   'SELECT json_array(album_id, tag_id) AS j FROM album_tags',
 ]
 
@@ -228,7 +228,7 @@ async function nextColor(db: D1Database): Promise<string> {
   return best
 }
 
-const TAG_FIELDS = 'id, name, color, is_genre AS isGenre, is_pinned AS isPinned'
+const TAG_FIELDS = 'id, name, color, is_genre AS isGenre, is_pinned AS isPinned, shape'
 
 interface TagRecord {
   id: number
@@ -236,6 +236,7 @@ interface TagRecord {
   color: string
   isGenre: number
   isPinned: number
+  shape: TagShape
 }
 
 const toTagDto = (row: TagRecord): TagDto => ({ ...row, isGenre: row.isGenre === 1, isPinned: row.isPinned === 1 })
@@ -284,6 +285,10 @@ libraryRoutes.patch('/tags/:id', async (c) => {
     if (typeof body.isGenre !== 'boolean') throw badRequest('isGenre doit être un booléen.')
     sets.push('is_genre = ?')
     binds.push(body.isGenre ? 1 : 0)
+  }
+  if (body.shape !== undefined) {
+    sets.push('shape = ?')
+    binds.push(parseTagShape(body.shape))
   }
   if (body.isPinned !== undefined) {
     if (typeof body.isPinned !== 'boolean') throw badRequest('isPinned doit être un booléen.')

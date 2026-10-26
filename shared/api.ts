@@ -35,7 +35,11 @@ export type AlbumRow = [
   lastPlayedAt: string | null,
   hidden: 0 | 1,
 ]
-export type TagRow = [id: number, name: string, color: string, isGenre: 0 | 1, isPinned: 0 | 1]
+/** Forme de la pastille dans la grille : le rond ordinaire, ou une silhouette qui se repère de loin. */
+export const TAG_SHAPES = ['dot', 'star', 'diamond'] as const
+export type TagShape = (typeof TAG_SHAPES)[number]
+
+export type TagRow = [id: number, name: string, color: string, isGenre: 0 | 1, isPinned: 0 | 1, shape: TagShape]
 
 /**
  * Piste d'un album : [numéro, disque, titre, durée en ms, artistes].
@@ -96,6 +100,8 @@ export interface TagDto {
   isGenre: boolean
   /** Tag épinglé : classé en tête de liste, avant tous les autres. */
   isPinned: boolean
+  /** Forme de sa pastille sur les pochettes. */
+  shape: TagShape
 }
 
 /** Réponse des routes qui modifient les données : nouvelle version de la bibliothèque. */
@@ -135,6 +141,6 @@ export interface ExportFile {
   app: 'spotitheque'
   format: 1
   exportedAt: string
-  tags: { name: string; color: string; isGenre?: boolean; isPinned?: boolean }[]
+  tags: { name: string; color: string; isGenre?: boolean; isPinned?: boolean; shape?: TagShape }[]
   albums: (Omit<SyncAlbum, 'upc'> & { tags: string[] })[]
 }

@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import type { AlbumRow, LibraryPayload, SyncAlbum } from '../shared/api'
+import type { AlbumRow, LibraryPayload, SyncAlbum, TagShape } from '../shared/api'
 import { normalizeTagName, tagSortKey } from '../shared/tags'
 import { api } from './api'
 import { logAction } from './lib/activity'
@@ -117,7 +117,14 @@ function fromPayload(p: LibraryPayload): LibraryData {
   const base: LibraryData = { version: p.version, albums, albumsById: new Map(albums.map((a) => [a.id, a])), tags: [], tagsById: new Map(), links }
   return withTags(
     base,
-    p.tags.map(([id, name, color, isGenre, isPinned]) => ({ id, name, color, isGenre: isGenre === 1, isPinned: isPinned === 1 })),
+    p.tags.map(([id, name, color, isGenre, isPinned, shape]) => ({
+      id,
+      name,
+      color,
+      isGenre: isGenre === 1,
+      isPinned: isPinned === 1,
+      shape: shape ?? 'dot',
+    })),
   )
 }
 
@@ -137,7 +144,7 @@ function toPayload(d: LibraryData): LibraryPayload {
       a.lastPlayedAt,
       a.hidden ? 1 : 0,
     ]),
-    tags: d.tags.map((t) => [t.id, t.name, t.color, t.isGenre ? 1 : 0, t.isPinned ? 1 : 0]),
+    tags: d.tags.map((t) => [t.id, t.name, t.color, t.isGenre ? 1 : 0, t.isPinned ? 1 : 0, t.shape]),
     links: [...d.links].flatMap(([albumId, tags]) => [...tags].map((tagId): [string, number] => [albumId, tagId])),
   }
 }
@@ -151,7 +158,7 @@ function toPayload(d: LibraryData): LibraryPayload {
  * 2 : les tags portent leur épinglage.
  * 3 : les albums portent leur masquage.
  */
-const CACHE_KEY = 'library.3'
+const CACHE_KEY = 'library.4'
 let persistTimer: ReturnType<typeof setTimeout> | undefined
 
 function setData(data: LibraryData) {
@@ -305,7 +312,10 @@ export function createTag(name: string): Promise<Tag> {
   })
 }
 
-export function updateTag(id: number, patch: { name?: string; color?: string; isGenre?: boolean; isPinned?: boolean }): Promise<void> {
+export function updateTag(
+  id: number,
+  patch: { name?: string; color?: string; isGenre?: boolean; isPinned?: boolean; shape?: TagShape },
+): Promise<void> {
   const clean = patch.name !== undefined ? { ...patch, name: normalizeTagName(patch.name).name } : patch
   return optimistic(
     (d) => withTags(d, d.tags.map((t) => (t.id === id ? { ...t, ...clean } : t))),

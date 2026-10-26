@@ -892,12 +892,61 @@ a {
   border-radius: 50%;
 }
 
-/* Un tag épinglé se repère sans lire : une étoile un peu plus grande, jamais un rond de plus. */
-.dots span.pinned {
+/*
+ * Deux silhouettes se repèrent sans lire, au milieu des ronds : l'étoile et le losange.
+ * Un peu plus grandes que les ronds, sinon la forme ne se lit pas à cette taille.
+ */
+.dots span.star,
+.dots span.diamond {
   width: 10px;
   height: 10px;
   border-radius: 0;
+}
+
+.dots span.star {
   clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+}
+
+.dots span.diamond {
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+}
+
+/* Le choix de la forme sur la fiche d'un tag : la silhouette elle-même, en grand. */
+.shapes {
+  display: flex;
+  gap: 8px;
+}
+
+.shapes button {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+/* Même contour clair que le choix d'une couleur, pour que le choix se lise d'un coup d'œil. */
+.shapes button.on {
+  border-color: var(--text);
+}
+
+.shapes i {
+  width: 16px;
+  height: 16px;
+  background: var(--tag);
+  border-radius: 50%;
+}
+
+.shapes i.star {
+  border-radius: 0;
+  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+}
+
+.shapes i.diamond {
+  border-radius: 0;
+  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
 }
 
 .dots em {

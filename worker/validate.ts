@@ -1,4 +1,4 @@
-import type { ArtistRef, SyncAlbum } from '../shared/api'
+import { TAG_SHAPES, type ArtistRef, type SyncAlbum, type TagShape } from '../shared/api'
 import { TAG_COLORS, TAG_NAME_MAX, normalizeTagName } from '../shared/tags'
 import { badRequest } from './errors'
 
@@ -29,6 +29,11 @@ export function parseTagName(v: unknown): { name: string; key: string } {
     throw badRequest(`Le nom d'un tag doit faire entre 1 et ${TAG_NAME_MAX} caractères.`)
   }
   return tag
+}
+
+export function parseTagShape(v: unknown): TagShape {
+  if (typeof v !== 'string' || !(TAG_SHAPES as readonly string[]).includes(v)) throw badRequest('Forme invalide.')
+  return v as TagShape
 }
 
 export function parseColor(v: unknown): string {

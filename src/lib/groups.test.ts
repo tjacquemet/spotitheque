@@ -8,6 +8,7 @@ const tag = (name: string, extra: Partial<Tag> = {}): Tag => ({
   color: '#ffffff',
   isGenre: false,
   isPinned: false,
+  shape: 'dot',
   ...extra,
 })
 

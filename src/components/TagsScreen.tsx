@@ -1,4 +1,5 @@
 import { Fragment, useMemo, useState, type FormEvent } from 'react'
+import type { TagShape } from '../../shared/api'
 import { TAG_COLORS, TAG_NAME_MAX, normalizeTagName } from '../../shared/tags'
 import { countTags } from '../lib/filter'
 import { tagGroupLabel } from '../lib/groups'
@@ -8,6 +9,12 @@ import { createTag, deleteTag, mergeTag, updateTag, useLibrary } from '../store'
 import { toast, toastError } from '../toast'
 import { BackIcon, ChevronIcon, PlusIcon } from './Icons'
 import { Sheet } from './Sheet'
+
+const SHAPES: { value: TagShape; label: string }[] = [
+  { value: 'dot', label: 'Rond' },
+  { value: 'star', label: 'Étoile' },
+  { value: 'diamond', label: 'Losange' },
+]
 
 function TagEditSheet({ tag, count, tags, onClose }: { tag: Tag; count: number; tags: Tag[]; onClose: () => void }) {
   const [name, setName] = useState(tag.name)
@@ -74,6 +81,27 @@ function TagEditSheet({ tag, count, tags, onClose }: { tag: Tag; count: number; 
           <em>Les genres sont regroupés à la fin des listes de tags.</em>
         </span>
       </label>
+
+      <h3 className="section-title">Pastille</h3>
+      <p className="hint">
+        La forme qui marque, dans la grille, les albums portant ce tag. Le rond convient à presque tout ; l'étoile et le
+        losange sont là pour les deux ou trois tags qu'on veut repérer sans lire.
+      </p>
+      <div className="shapes" role="group" aria-label="Forme de la pastille">
+        {SHAPES.map(({ value, label }) => (
+          <button
+            key={value}
+            type="button"
+            className={value === tag.shape ? 'on' : ''}
+            style={{ ['--tag' as string]: tag.color }}
+            aria-label={label}
+            aria-pressed={value === tag.shape}
+            onClick={() => updateTag(tag.id, { shape: value }).catch(toastError)}
+          >
+            <i className={value} />
+          </button>
+        ))}
+      </div>
 
       <h3 className="section-title">Couleur</h3>
       <div className="swatches">
