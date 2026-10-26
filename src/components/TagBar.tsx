@@ -67,6 +67,7 @@ export function TagBar({
         key={tag.id}
         label={tag.name}
         color={tag.color}
+        shape={tag.shape}
         state={chipState}
         count={chipState === 'excluded' ? undefined : count}
         muted={chipState === 'off' && count === 0}

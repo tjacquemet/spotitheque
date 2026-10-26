@@ -345,6 +345,11 @@ a {
   background: var(--tag);
 }
 
+.chip .dot:not([data-shape='dot']) {
+  width: 11px;
+  height: 11px;
+}
+
 .chip .count {
   color: var(--text-3);
   font-size: 12px;
@@ -907,22 +912,26 @@ a {
 }
 
 /*
- * Deux silhouettes se repèrent sans lire, au milieu des ronds : l'étoile et le losange.
- * Un peu plus grandes que les ronds, sinon la forme ne se lit pas à cette taille.
+ * Les silhouettes d'une pastille de tag, définies une fois pour toutes les listes qui en affichent :
+ * grille d'albums, puces, lignes de tags, choix de la forme. Une forme a besoin d'un peu plus de place
+ * qu'un rond pour se lire : chaque contexte agrandit la sienne juste en dessous.
  */
-.dots span.star,
-.dots span.diamond {
-  width: 10px;
-  height: 10px;
+[data-shape='star'],
+[data-shape='diamond'] {
   border-radius: 0;
 }
 
-.dots span.star {
+[data-shape='star'] {
   clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
 }
 
-.dots span.diamond {
+[data-shape='diamond'] {
   clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+}
+
+.dots span:not([data-shape='dot']) {
+  width: 10px;
+  height: 10px;
 }
 
 /* Le choix de la forme sur la fiche d'un tag : la silhouette elle-même, en grand. */
@@ -951,16 +960,6 @@ a {
   height: 16px;
   background: var(--tag);
   border-radius: 50%;
-}
-
-.shapes i.star {
-  border-radius: 0;
-  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
-}
-
-.shapes i.diamond {
-  border-radius: 0;
-  clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
 }
 
 .dots em {
@@ -1450,6 +1449,11 @@ a {
   height: 12px;
   flex: none;
   border-radius: 50%;
+}
+
+.row-dot:not([data-shape='dot']) {
+  width: 14px;
+  height: 14px;
 }
 
 .row-label {

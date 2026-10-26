@@ -83,7 +83,7 @@ export function TagPicker({
           return (
             <Fragment key={tag.id}>
               {group && <span className="chips-label">{group}</span>}
-              <TagChip label={tag.name} color={tag.color} state={stateOf(tag)} onClick={() => onToggle(tag)} />
+              <TagChip label={tag.name} color={tag.color} shape={tag.shape} state={stateOf(tag)} onClick={() => onToggle(tag)} />
             </Fragment>
           )
         })}

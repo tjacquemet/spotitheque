@@ -98,7 +98,7 @@ function TagEditSheet({ tag, count, tags, onClose }: { tag: Tag; count: number; 
             aria-pressed={value === tag.shape}
             onClick={() => updateTag(tag.id, { shape: value }).catch(toastError)}
           >
-            <i className={value} />
+            <i data-shape={value} />
           </button>
         ))}
       </div>
@@ -201,7 +201,7 @@ export function TagsScreen({ onBack }: { onBack: () => void }) {
                 {group && <li className="list-group-label">{group}</li>}
                 <li>
                   <button type="button" className="row" onClick={() => setEditing(tag.id)}>
-                    <span className="row-dot" style={{ background: tag.color }} />
+                    <span className="row-dot" data-shape={tag.shape} style={{ background: tag.color }} />
                     <span className="row-label">{tag.name}</span>
                     <span className="row-count">{plural(counts.get(tag.id) ?? 0, 'album', 'albums')}</span>
                     <ChevronIcon size={16} className="row-chevron" />

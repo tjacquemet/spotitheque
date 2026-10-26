@@ -47,7 +47,7 @@ const AlbumCard = memo(function AlbumCard({ album, tags, selecting, selected, on
       <div className="card-artist">{album.artistNames}</div>
       <div className="dots" aria-hidden="true">
         {tags.slice(0, MAX_DOTS).map((t) => (
-          <span key={t.id} className={t.shape} style={{ background: t.color }} />
+          <span key={t.id} data-shape={t.shape} style={{ background: t.color }} />
         ))}
         {tags.length > MAX_DOTS && <em>+{tags.length - MAX_DOTS}</em>}
       </div>

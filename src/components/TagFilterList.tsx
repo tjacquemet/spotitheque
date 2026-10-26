@@ -33,7 +33,7 @@ export function TagFilterList({ tags, counts, include, exclude, onToggle, onTogg
             style={{ '--tag': tag.color } as CSSProperties}
           >
             <button type="button" className="tag-row-main" aria-pressed={state === 'on'} onClick={() => onToggle(tag.id)}>
-              <span className="row-dot" />
+              <span className="row-dot" data-shape={tag.shape} />
               <span className="tag-row-name">{tag.name}</span>
               {state !== 'excluded' && <span className="tag-row-count">{count}</span>}
             </button>
