@@ -11,6 +11,8 @@
   --accent-ink: #04130a;
   --danger: #f87171;
   --warn: #fbbf24;
+  /* Le liseré des albums portant un tag en étoile : doré, pour dire « celui-ci compte ». */
+  --gold: #f0c64a;
   --ink-on-tag: #0b0b0c;
   --radius: 14px;
   --pad: 14px;
@@ -830,6 +832,18 @@ a {
   transform: scale(0.965);
 }
 
+/*
+ * Album portant un tag en étoile : liseré doré et halo. La pastille se lit quand on regarde la carte ;
+ * le liseré, lui, se repère à l'autre bout de la grille, sans rien lire du tout.
+ */
+.card.starred .cover {
+  box-shadow:
+    0 0 0 2px var(--gold),
+    0 0 14px rgb(240 198 74 / 0.45),
+    0 2px 10px rgb(0 0 0 / 0.35);
+}
+
+/* La sélection passe devant : c'est un état du moment, le liseré est une propriété de l'album. */
 .card.selected .cover {
   outline: 3px solid var(--accent);
   outline-offset: -3px;

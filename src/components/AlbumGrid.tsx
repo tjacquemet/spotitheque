@@ -24,11 +24,13 @@ const AlbumCard = memo(function AlbumCard({ album, tags, selecting, selected, on
     () => onSelect(album.id),
     () => (selecting ? onSelect(album.id) : onOpen(album.id)),
   )
+  // Un tag en étoile vaut à l'album son liseré doré : la forme choisie sur la fiche du tag décide des deux.
+  const starred = tags.some((t) => t.shape === 'star')
   return (
     <button
       type="button"
       data-album={album.id}
-      className={`card${selected ? ' selected' : ''}${album.inLibrary ? '' : ' removed'}`}
+      className={`card${starred ? ' starred' : ''}${selected ? ' selected' : ''}${album.inLibrary ? '' : ' removed'}`}
       aria-pressed={selecting ? selected : undefined}
       aria-label={`${album.name}, ${album.artistNames}`}
       {...press}
